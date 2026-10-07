@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>SweetHavens</title>
+        <link rel="stylesheet" href="home.css">
+    </head>
+    <body>
+        <header>
+            <div id="h_title-cont">
+                <div><img id="logo" src="assets/Logo.png"></div>
+                <div><p id="h_title">SweetHavens</p></div>
+            </div>
+        </header>
+        <div>
+            <a id="login_button" href="login.html">Login</a>
+            <a id="signup_button" href="signup.html">Create Account</a>
+        </div>
+        <div class="form_cont">
+        <p class="form_header">Create your account to start ordering your favorite treats.</p>
+        <form id="signup_form">
+            <label for="f_name">First Name</label><br>
+            <input type="text" id="f_name" name="f_name" placeholder="John"required><br>
+            <label for="l_name">Last Name</label><br>
+            <input type="text" id="l_name" name="l_name" placeholder="Doe"required><br><br>
+            <label for="c_password">Create Password</label><br>
+            <input type="password" id="c_password" name="c_password" placeholder="********" required><br>
+            <label for="confirm_password">Confirm Password</label><br>
+            <input type="password" id="confirm_password" name="confirm_password" placeholder="********" required><br><br>
+            <label for="age">Age</label><br>
+            <input type="number" id="age" name="age" placeholder="23" required><br><br>
+            <label for="sex">Sex</label><br>
+            <input list="sex" name="sex" placeholder="--" required><br><br>
+            <datalist id="sex">
+                <option value="Male">
+                <option value="Female">
+                <option value="Prefer not to say">
+            </datalist>
+            <label for="address">Address (House/Unit No. and Street)</label><br>
+            <input type="text" id="address" name="address" placeholder="1234 Main St." required><br>
+            <label for="region">Region</label><br>
+            <input type="text" id="region" name="region" placeholder="NCR" required><br>
+            <label for="city">City/Municipality</label><br>
+            <input type="text" id="city" name="city" placeholder="Manila" required><br>
+            <label for="brgy">Barangay</label><br>
+            <input type="text" id="brgy" name="brgy" placeholder="Tondo" required><br>
+            <label for="zip">Zip Code</label><br>
+            <input type="text" id="zip" name="zip" placeholder="1***" required><br>
+            <label for="landmark">Landmark/Delivery Notes</label><br>
+            <input type="text" id="landmark" name="landmark" placeholder="--" required><br><br>
+            <button type="submit" id="login_btn">Sign Up</button>
+            <p>Already have an account? <a id="login_button" href="login.html">Create Account</a></p>
+        </form>
+        </div>
+    </body>
