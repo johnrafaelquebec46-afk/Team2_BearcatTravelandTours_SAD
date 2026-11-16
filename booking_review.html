@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FDF3F3">
+<meta name="description" content="Bearcat Travel & Tours customer booking demo — Review your booking.">
+<title>Review your booking | Bearcat Travel &amp; Tours</title>
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body data-page="booking-review">
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="site-header">
+  <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
+  <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+  <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a href="services.html">Services</a><a href="booking_details.html">Booking request</a><a href="track_booking.html">Track booking</a></nav>
+  <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
+</header>
+<main id="main" class="page-shell">
+  <header class="page-heading"><p class="eyebrow">CUSTOMER · REVIEW BEFORE SENDING · STEP 3 OF 3</p><h1>Review your booking</h1><p>Check the trip details and estimated payment before submission.</p></header>
+  <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
+  <div class="stepper"><span class="complete">✓&nbsp; Trip details</span><span class="complete">✓&nbsp; Travelers</span><span class="current">3&nbsp; Review</span></div><div class="review-grid"><section class="surface content-card"><h2>Trip summary</h2><dl class="summary-list"><div><dt>Customer</dt><dd>Customer name</dd></div><div><dt>Service</dt><dd>Selected service</dd></div><div><dt>Date / travelers</dt><dd>MM/DD/YYYY · <span data-traveler-count>—</span> people</dd></div><div><dt>Route</dt><dd>Pickup → destination</dd></div></dl><h3>Traveler list</h3><div data-traveler-summary-list><p>Traveler 1&nbsp; Name · birthdate · ID</p><p>Traveler 2&nbsp; Name · birthdate · ID</p></div></section><section class="surface content-card lavender-panel"><h2>Estimated cost</h2><dl class="summary-list"><div><dt>Service estimate</dt><dd>₱—</dd></div><div><dt>Number of travelers</dt><dd data-traveler-count>—</dd></div><div><dt>Estimated total</dt><dd>₱—</dd></div><div><dt>Deposit requirement</dt><dd>30% or 50%</dd></div><div><dt>Estimated down payment</dt><dd>₱—</dd></div></dl><p class="hint">Final amount and deadline are sent after staff approval.</p><p>After submission, the booking starts as Pending and a booking reference is generated.</p></section></div><div class="actions"><a class="button button-soft" href="traveler_details.html">Back to edit</a><button class="button button-primary" type="button" data-submit-booking>Submit booking request</button></div>
+</main>
+
+</body></html>
