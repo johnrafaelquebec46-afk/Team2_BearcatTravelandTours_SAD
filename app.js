@@ -5,6 +5,10 @@
   const PAX_KEY = "bearcatCustomerDemoPax";
   const TRAVELER_COUNT_KEY = "bearcatCustomerDemoTravelerCount";
   const TRIP_DATE_KEY = "bearcatCustomerDemoTripDate";
+  const TRIP_TYPE_KEY = "bearcatCustomerDemoTripType";
+  const RETURN_DATE_KEY = "bearcatCustomerDemoReturnDate";
+  const DEPARTURE_SCHEDULE_KEY = "bearcatCustomerDemoDepartureSchedule";
+  const RETURN_SCHEDULE_KEY = "bearcatCustomerDemoReturnSchedule";
   const MINOR_TRAVELER_KEY = "bearcatCustomerDemoMinorTraveler";
   const readRef = () => { try { return sessionStorage.getItem(REF_KEY) || "BTT-DEMO01"; } catch (_) { return "BTT-DEMO01"; } };
   const saveStatus = (value) => { try { sessionStorage.setItem(STATUS_KEY, String(value).toLowerCase()); } catch (_) {} };
@@ -45,9 +49,56 @@
   };
   if (badge) badge.textContent = badgeText[page] || "CUSTOMER PORTAL";
 
+  const localToday = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  };
   const tripDateField = document.getElementById("trip-date") || document.getElementById("error-date");
+  const returnDateField = document.querySelector('[data-return-leg] [data-travel-date]');
+  const tripTypeRadios = [...document.querySelectorAll('input[name="tripType"]')];
+  const departureScheduleField = document.querySelector('[name="departureSchedule"]');
+  const returnScheduleField = document.querySelector('[name="returnSchedule"]');
+  const returnLeg = document.querySelector("[data-return-leg]");
+  const updateTripType = () => {
+    const isRoundTrip = tripTypeRadios.find((radio) => radio.checked)?.value === "round-trip";
+    if (returnLeg) returnLeg.hidden = !isRoundTrip;
+    if (returnDateField) returnDateField.required = isRoundTrip;
+    if (returnScheduleField) returnScheduleField.required = isRoundTrip;
+  };
+  document.querySelectorAll("[data-travel-date]").forEach((field) => { field.min = localToday(); });
   if (tripDateField) {
-    try { tripDateField.value = sessionStorage.getItem(TRIP_DATE_KEY) || tripDateField.value; } catch (_) {}
+    try {
+      const savedDeparture = sessionStorage.getItem(TRIP_DATE_KEY) || "";
+      tripDateField.value = savedDeparture >= localToday() ? savedDeparture : "";
+      if (savedDeparture && savedDeparture < localToday()) sessionStorage.removeItem(TRIP_DATE_KEY);
+    } catch (_) {}
+  }
+  if (returnDateField) {
+    try {
+      const savedReturn = sessionStorage.getItem(RETURN_DATE_KEY) || "";
+      returnDateField.value = savedReturn >= localToday() ? savedReturn : "";
+      if (savedReturn && savedReturn < localToday()) sessionStorage.removeItem(RETURN_DATE_KEY);
+    } catch (_) {}
+  }
+  if (tripTypeRadios.length) {
+    try {
+      const savedType = sessionStorage.getItem(TRIP_TYPE_KEY);
+      const radio = tripTypeRadios.find((item) => item.value === savedType);
+      if (radio) radio.checked = true;
+    } catch (_) {}
+    tripTypeRadios.forEach((radio) => radio.addEventListener("change", updateTripType));
+    updateTripType();
+  }
+  try {
+    if (departureScheduleField) departureScheduleField.value = sessionStorage.getItem(DEPARTURE_SCHEDULE_KEY) || "";
+    if (returnScheduleField) returnScheduleField.value = sessionStorage.getItem(RETURN_SCHEDULE_KEY) || "";
+  } catch (_) {}
+  if (tripDateField && returnDateField) {
+    returnDateField.min = tripDateField.value || localToday();
+    tripDateField.addEventListener("change", () => {
+      returnDateField.min = tripDateField.value || localToday();
+      if (returnDateField.value && returnDateField.value < returnDateField.min) returnDateField.value = "";
+    });
   }
   const minorTravelerRadios = [...document.querySelectorAll('input[name="minorTraveler"]')];
   const minorTravelerHint = document.getElementById("minor-traveler-hint");
@@ -64,6 +115,30 @@
     minorTravelerRadios.forEach((radio) => radio.addEventListener("change", updateMinorTravelerHint));
     updateMinorTravelerHint();
   }
+  const reviewTripType = document.getElementById("review-trip-type");
+  if (reviewTripType) {
+    const formatTripDate = (value) => value ? new Intl.DateTimeFormat("en", {month:"short", day:"numeric", year:"numeric"}).format(new Date(`${value}T12:00:00`)) : "—";
+    let savedType = "", savedDeparture = "", savedReturn = "", savedDepartureTime = "", savedReturnTime = "";
+    try {
+      savedType = sessionStorage.getItem(TRIP_TYPE_KEY) || "";
+      savedDeparture = sessionStorage.getItem(TRIP_DATE_KEY) || "";
+      savedReturn = sessionStorage.getItem(RETURN_DATE_KEY) || "";
+      savedDepartureTime = sessionStorage.getItem(DEPARTURE_SCHEDULE_KEY) || "";
+      savedReturnTime = sessionStorage.getItem(RETURN_SCHEDULE_KEY) || "";
+    } catch (_) {}
+    reviewTripType.textContent = savedType === "one-way" ? "One way" : savedType === "round-trip" ? "Round trip" : "—";
+    const departureDate = document.getElementById("review-departure-date");
+    const departureTime = document.getElementById("review-departure-schedule");
+    const returnRow = document.getElementById("review-return-row");
+    const returnDate = document.getElementById("review-return-date");
+    const returnTime = document.getElementById("review-return-schedule");
+    if (departureDate) departureDate.textContent = formatTripDate(savedDeparture);
+    if (departureTime) departureTime.textContent = savedDepartureTime || "—";
+    if (returnRow) returnRow.hidden = savedType !== "round-trip";
+    if (returnDate) returnDate.textContent = formatTripDate(savedReturn);
+    if (returnTime) returnTime.textContent = savedReturnTime || "—";
+  }
+
   const savedTravelerCount = (() => {
     try { return sessionStorage.getItem(TRAVELER_COUNT_KEY) || sessionStorage.getItem(PAX_KEY) || ""; }
     catch (_) { return ""; }
@@ -126,11 +201,33 @@
     if (form.classList.contains("traveler-entry-form") && !validateTravelerEligibility()) return;
     if (form.id === "availability-form") {
       const selectedDate = document.getElementById("calendar-selected-date");
-      if (!selectedDate || !selectedDate.value) {
-        announce("Choose an available travel date before continuing.");
+      if (!selectedDate || !selectedDate.value || selectedDate.value < localToday()) {
+        announce("Choose a current or future available travel date before continuing.");
         return;
       }
       try { sessionStorage.setItem(TRIP_DATE_KEY, selectedDate.value); } catch (_) {}
+    }
+    if (form.id === "booking-details-form" || form.dataset.pageForm === "booking-details") {
+      const tripType = form.querySelector('input[name="tripType"]:checked')?.value;
+      const departureDate = form.querySelector('[name="departureDate"]')?.value || "";
+      const returnDate = form.querySelector('[name="returnDate"]')?.value || "";
+      if (!tripType) { announce("Choose one-way or round-trip travel."); return; }
+      if (departureDate < localToday() || (tripType === "round-trip" && returnDate < departureDate)) {
+        announce(tripType === "round-trip" ? "Choose a return date on or after the departure date." : "Choose a current or future travel date.");
+        return;
+      }
+      try {
+        sessionStorage.setItem(TRIP_TYPE_KEY, tripType);
+        sessionStorage.setItem(TRIP_DATE_KEY, departureDate);
+        sessionStorage.setItem(DEPARTURE_SCHEDULE_KEY, form.querySelector('[name="departureSchedule"]')?.value || "");
+        if (tripType === "round-trip") {
+          sessionStorage.setItem(RETURN_DATE_KEY, returnDate);
+          sessionStorage.setItem(RETURN_SCHEDULE_KEY, form.querySelector('[name="returnSchedule"]')?.value || "");
+        } else {
+          sessionStorage.removeItem(RETURN_DATE_KEY);
+          sessionStorage.removeItem(RETURN_SCHEDULE_KEY);
+        }
+      } catch (_) {}
     }
     const paxField = form.querySelector("#pax, #error-pax");
     const minorChoice = form.querySelector('input[name="minorTraveler"]:checked');
@@ -462,6 +559,7 @@
   const renderCalendar = (monthValue, initialSelected = "") => {
     if (!calendar || !monthValue || !/^\d{4}-\d{2}$/.test(monthValue)) return;
     const [year, month] = monthValue.split("-").map(Number);
+    const today = localToday();
     const firstOffset = (new Date(year, month - 1, 1).getDay() + 6) % 7;
     const daysInMonth = new Date(year, month, 0).getDate();
     const fullDays = new Set([5, 12, 13, 20, 27]);
@@ -474,31 +572,37 @@
     }
     for (let number = 1; number <= daysInMonth; number++) {
       const date = `${year}-${String(month).padStart(2,"0")}-${String(number).padStart(2,"0")}`;
+      const isPast = date < today;
       const isFull = fullDays.has(number);
-      const isSelected = date === initialSelected && !isFull;
+      const isSelected = date === initialSelected && !isFull && !isPast;
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `calendar-day ${isFull ? "full" : "open"}${isSelected ? " is-selected" : ""}`;
+      button.className = `calendar-day ${isPast ? "past" : isFull ? "full" : "open"}${isSelected ? " is-selected" : ""}`;
       button.dataset.calendarDay = String(number);
       button.dataset.calendarDate = date;
-      button.dataset.availability = isFull ? "full" : "open";
+      button.dataset.availability = isPast ? "past" : isFull ? "full" : "open";
       button.setAttribute("aria-pressed", String(isSelected));
-      button.setAttribute("aria-label", `Day ${number}, ${isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}`);
-      button.disabled = isFull;
-      if (isFull) button.setAttribute("aria-disabled", "true");
-      button.innerHTML = `<span>${number}</span><small>${isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}</small>`;
+      button.setAttribute("aria-label", `Day ${number}, ${isPast ? "PAST, unavailable" : isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}`);
+      button.disabled = isFull || isPast;
+      if (button.disabled) button.setAttribute("aria-disabled", "true");
+      button.innerHTML = `<span>${number}</span><small>${isPast ? "PAST" : isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}</small>`;
       calendar.append(button);
     }
-    if (selectedDateInput) selectedDateInput.value = initialSelected;
-    if (selectedDateDisplay) selectedDateDisplay.textContent = formatCalendarDate(initialSelected);
+    const validSelected = initialSelected >= today && !fullDays.has(Number(initialSelected.slice(-2)));
+    if (selectedDateInput) selectedDateInput.value = validSelected ? initialSelected : "";
+    if (selectedDateDisplay) selectedDateDisplay.textContent = formatCalendarDate(validSelected ? initialSelected : "");
   };
 
   if (monthInput && calendar) {
+    const currentMonth = localToday().slice(0, 7);
+    monthInput.min = currentMonth;
     let savedDate = selectedDateInput?.value || "";
     try { savedDate = sessionStorage.getItem(TRIP_DATE_KEY) || savedDate; } catch (_) {}
-    if (/^\d{4}-\d{2}-\d{2}$/.test(savedDate)) monthInput.value = savedDate.slice(0, 7);
-    renderCalendar(monthInput.value, savedDate);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(savedDate) && savedDate >= localToday()) monthInput.value = savedDate.slice(0, 7);
+    if (monthInput.value < currentMonth) monthInput.value = currentMonth;
+    renderCalendar(monthInput.value, savedDate >= localToday() ? savedDate : "");
     monthInput.addEventListener("change", () => {
+      if (monthInput.value < localToday().slice(0, 7)) monthInput.value = localToday().slice(0, 7);
       try { sessionStorage.removeItem(TRIP_DATE_KEY); } catch (_) {}
       renderCalendar(monthInput.value);
     });
