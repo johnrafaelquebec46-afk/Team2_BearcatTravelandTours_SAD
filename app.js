@@ -434,7 +434,7 @@
       BearcatBookingFlow.writeDraft({ travelers: rawTravelers });
     };
 
-    const restoreTravelerDraft = () => {
+const restoreTravelerDraft = () => {
       const savedDraft = BearcatBookingFlow.readDraft();
       if (!Array.isArray(savedDraft.travelers) || savedDraft.travelers.length === 0) return;
 
@@ -449,15 +449,35 @@
 
         if (nameInput && t.full_name) nameInput.value = t.full_name;
         if (birthInput && t.birthdate) birthInput.value = t.birthdate;
-        if (idTypeSelect && t.id_type) {
-          idTypeSelect.value = t.id_type;
-          idTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+        // Parse fallback from id_no (e.g. "PASSPORT:123456") if id_type/id_number weren't split
+        let savedType = t.id_type || "";
+        let savedNum = t.id_number || "";
+        if (!savedType && typeof t.id_no === "string" && t.id_no.includes(":")) {
+          const [rawType, ...rest] = t.id_no.split(":");
+          savedType = rawType;
+          savedNum = rest.join(":");
+        } else if (!savedNum && t.id_no) {
+          savedNum = t.id_no;
         }
-        if (idNumInput && t.id_number) idNumInput.value = t.id_number;
+
+        if (idTypeSelect && savedType) {
+          const matchOpt = [...idTypeSelect.options].find(
+            (o) => o.value.toLowerCase() === savedType.toLowerCase() || o.text.toLowerCase() === savedType.toLowerCase()
+          );
+          if (matchOpt) {
+            idTypeSelect.value = matchOpt.value;
+            idTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+        if (idNumInput && savedNum) {
+          idNumInput.disabled = false;
+          idNumInput.value = savedNum;
+        }
       });
     };
 
-    setTimeout(restoreTravelerDraft, 0);
+    setTimeout(restoreTravelerDraft, 80);
     travelerEntryForm.addEventListener("input", syncTravelerDraft);
     travelerEntryForm.addEventListener("change", syncTravelerDraft);
   }
