@@ -385,6 +385,271 @@
   );
 
   window.BearcatClientAPI.BearcatBookingFlow = BearcatBookingFlow;
+  // ARA
+  const BearcatPostBooking = {
+    verifyBookingOwnership(ref, email = null) {
+      const booking = BearcatStore.findBookingByRef(ref);
+      if (!booking) {
+        return { ok: false, message: "Booking reference not found. Check your BTT reference code." };
+      }
+      if (email !== null) {
+        const cleanEmail = BearcatIntegrity.sanitize(email, 100).toLowerCase();
+        const customers = BearcatStore.readTable(DB_KEYS.CUSTOMERS);
+        const owner = customers.find((c) => Number(c.customer_id) === Number(booking.customer_id));
+        if (!owner || owner.email.toLowerCase() !== cleanEmail) {
+          return { ok: false, message: "Email address does not match the customer record for this booking." };
+        }
+      }
+      return { ok: true, booking };
+    },
+    recordPayment({ bookingRef, method, amount, paymentRef, file }) {
+      const lookup = this.verifyBookingOwnership(bookingRef);
+      if (!lookup.ok) return lookup;
+
+      const cleanMethod = BearcatIntegrity.sanitize(method, 50);
+      const cleanPayRef = BearcatIntegrity.sanitize(paymentRef, 80);
+      const numericAmount = Number(amount);
+
+      if (!cleanMethod || !cleanPayRef || cleanPayRef.length < 4) {
+        return { ok: false, message: "Select a payment method and enter a valid payment reference number." };
+      }
+      if (!BearcatIntegrity.isValidCurrency(numericAmount, false)) {
+        return { ok: false, message: "Payment amount must be greater than PHP 0.00." };
+      }
+
+      const fileCheck = BearcatIntegrity.validateProofFile(file);
+      if (!fileCheck.ok) return fileCheck;
+
+      const payments = BearcatStore.readTable(DB_KEYS.PAYMENTS);
+      const nextPaymentId = payments.reduce((max, p) => Math.max(max, Number(p.payment_id) || 0), 0) + 1;
+      const now = new Date().toISOString();
+
+      payments.push({
+        payment_id: nextPaymentId,
+        booking_id: lookup.booking.booking_id,
+        verified_by: null,
+        amount: Number(numericAmount.toFixed(2)),
+        method: `${cleanMethod} (${cleanPayRef})`,
+        proof_file: file.name,
+        payment_status: "submitted",
+        paid_at: now,
+        verified_at: null
+      });
+      BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments);
+
+      const bookings = BearcatStore.readTable(DB_KEYS.BOOKINGS);
+      const targetBooking = bookings.find((b) => Number(b.booking_id) === Number(lookup.booking.booking_id));
+      if (targetBooking) {
+        targetBooking.status = "payment_submitted";
+        targetBooking.updated_at = now;
+        BearcatStore.writeTable(DB_KEYS.BOOKINGS, bookings);
+      }
+
+      try {
+        sessionStorage.setItem(REF_KEY, lookup.booking.booking_ref);
+      } catch (_) {}
+      saveStatus("payment_submitted");
+
+      return { ok: true };
+    },
+    submitChangeOrCancel({ bookingRef, requestType, details }) {
+      const lookup = this.verifyBookingOwnership(bookingRef);
+      if (!lookup.ok) return lookup;
+
+      const cleanType = BearcatIntegrity.sanitize(requestType, 50);
+      const cleanDetails = BearcatIntegrity.sanitize(details, 1000);
+      if (!cleanDetails || cleanDetails.length < 5) {
+        return { ok: false, message: "Provide complete details or reason (at least 5 characters) before submitting." };
+      }
+
+      const changes = BearcatStore.readTable(DB_KEYS.CHANGES);
+      const nextChangeId = changes.reduce((max, ch) => Math.max(max, Number(ch.change_id) || 0), 0) + 1;
+      const now = new Date().toISOString();
+
+      changes.push({
+        change_id: nextChangeId,
+        booking_id: lookup.booking.booking_id,
+        decided_by: null,
+        request_type: cleanType,
+        details: cleanDetails,
+        change_fee_percent: 0.0,
+        change_fee: 0.0,
+        price_difference: 0.0,
+        status: "pending",
+        requested_at: now,
+        decided_at: null
+      });
+      BearcatStore.writeTable(DB_KEYS.CHANGES, changes);
+
+      try {
+        sessionStorage.setItem(REF_KEY, lookup.booking.booking_ref);
+      } catch (_) {}
+
+      return { ok: true };
+    }
+  };
+
+  // Pre-fill active booking reference on post-booking forms if available
+  const activeSavedRef = (() => {
+    try {
+      return sessionStorage.getItem(REF_KEY) || "";
+    } catch (_) {
+      return "";
+    }
+  })();
+  if (activeSavedRef && activeSavedRef !== "BTT-DEMO01") {
+    ["booking-ref", "change-ref", "cancel-ref"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (field && !field.value) field.value = activeSavedRef;
+    });
+  }
+
+  // Capture-phase handlers for Tracking, Payment, Change Request & Cancellation
+  document.addEventListener(
+    "submit",
+    (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+
+      // 1. Track Booking Form (real DB lookup with demo fallback)
+      if (form.matches("form[data-track-form]")) {
+        const refInput = document.getElementById("booking-ref");
+        const emailInput = document.getElementById("track-email");
+        const refVal = BearcatIntegrity.sanitize(refInput?.value, 50).toUpperCase();
+        const emailVal = BearcatIntegrity.sanitize(emailInput?.value, 100);
+
+        if (!BearcatIntegrity.isValidEmail(emailVal)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          announce("Enter a valid email address to verify your booking.");
+          emailInput?.focus();
+          return;
+        }
+
+        const realBooking = BearcatStore.findBookingByRef(refVal);
+        if (realBooking) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+
+          const verified = BearcatPostBooking.verifyBookingOwnership(refVal, emailVal);
+          if (!verified.ok) {
+            announce(verified.message);
+            window.alert(verified.message);
+            return;
+          }
+
+          const statusKey = String(realBooking.status || "pending").toLowerCase();
+          const routes = {
+            pending: "booking_pending.html",
+            approved: "request_approved.html",
+            payment_submitted: "payment_submitted.html",
+            confirmed: "booking_confirmed.html",
+            expired: "payment_deadline_passed.html",
+            closed: "booking_closed.html",
+            cancelled: "cancellation_result.html"
+          };
+
+          try {
+            sessionStorage.setItem(REF_KEY, realBooking.booking_ref);
+          } catch (_) {}
+          saveStatus(statusKey);
+          go(routes[statusKey] || "booking_pending.html");
+          return;
+        }
+      }
+
+      // 2. Submit Payment Form
+      if (document.getElementById("pay-method") && document.getElementById("pay-proof")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        const refInput = document.getElementById("payment-booking-ref") || document.getElementById("booking-ref");
+        const targetRef = refInput?.value || readRef();
+        const method = document.getElementById("pay-method")?.value;
+        const amount = document.getElementById("pay-amount")?.value;
+        const payRef = document.getElementById("pay-ref")?.value;
+        const proofFile = document.getElementById("pay-proof")?.files?.[0];
+
+        const result = BearcatPostBooking.recordPayment({
+          bookingRef: targetRef,
+          method,
+          amount,
+          paymentRef: payRef,
+          file: proofFile
+        });
+
+        if (!result.ok) {
+          announce(result.message);
+          window.alert(result.message);
+          return;
+        }
+
+        go(form.dataset.next || "payment_submitted.html");
+        return;
+      }
+
+      // 3. Change Request Form
+      if (form.id === "change-form") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        const refVal = document.getElementById("change-ref")?.value;
+        const reqType = document.getElementById("request-type")?.value || "change";
+        const changeText = document.getElementById("change-text")?.value || "";
+        const preferred = document.getElementById("preferred")?.value || "";
+
+        if (reqType === "cancel") {
+          go("cancellation_request.html");
+          return;
+        }
+
+        const combinedDetails = preferred
+          ? `${changeText} | Preferred update: ${preferred}`
+          : changeText;
+
+        const result = BearcatPostBooking.submitChangeOrCancel({
+          bookingRef: refVal,
+          requestType: reqType,
+          details: combinedDetails
+        });
+
+        if (!result.ok) {
+          announce(result.message);
+          window.alert(result.message);
+          return;
+        }
+
+        go("change_request_received.html");
+        return;
+      }
+
+      // 4. Cancellation Request Form
+      if (document.getElementById("cancel-ref") && document.getElementById("cancel-reason")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        const refVal = document.getElementById("cancel-ref")?.value;
+        const reasonVal = document.getElementById("cancel-reason")?.value;
+
+        const result = BearcatPostBooking.submitChangeOrCancel({
+          bookingRef: refVal,
+          requestType: "cancellation",
+          details: reasonVal
+        });
+
+        if (!result.ok) {
+          announce(result.message);
+          window.alert(result.message);
+          return;
+        }
+
+        go(form.dataset.next || "change_request_received.html");
+      }
+    },
+    true
+  );
+
+  window.BearcatClientAPI.BearcatPostBooking = BearcatPostBooking;
 
   document.querySelectorAll(".booking-reference, #booking-reference").forEach((node) => { node.textContent = readRef(); });
 
