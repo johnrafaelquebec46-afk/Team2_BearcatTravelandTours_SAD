@@ -9,19 +9,24 @@
     <link rel="stylesheet" href="styles.css">
     <script src="app.js" defer></script>
 </head>
-
-<body data-page="booking-details-owner" data-role="owner"><a class="skip-link" href="#main">Skip to main content</a>
-    <header class="site-header"><a class="brand" href="owner_dashboard.html" aria-label="Bearcat Travel and Tours"><span
-                class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp;
-                    TOURS</small></span></a><button class="menu-toggle" type="button" aria-expanded="false"
-            aria-controls="primary-nav">Menu</button>
-        <nav class="primary-nav" id="primary-nav" aria-label="Owner navigation"><a
-                href="owner_dashboard.html">Dashboard</a><a href="all_company_bookings.html">Bookings</a><a
-                href="payments_list.html">Payments</a><a href="change_requests_list.html">Change requests</a><a
-                href="review_release_refunds.html">Refunds</a><a href="manage_services_rates.html">Services &
-                rates</a><a href="booking_payment_reports.html">Reports</a><a
-                href="manage_staff_accounts.html">Staff</a><a href="business_system_settings.html">Settings</a></nav><a
-            class="portal-badge" href="owner_dashboard.html">OWNER</a>
+<!--Admin page payment report-->
+<body data-page="booking-details-owner" data-role="owner">
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="site-header">
+        <a class="brand" href="owner_dashboard.html" aria-label="Bearcat Travel and Tours">
+            <span class="brand-mark" aria-hidden="true">B</span>
+            <span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+        <nav class="primary-nav" id="primary-nav" aria-label="Owner navigation">
+            <a href="owner_dashboard.html">Dashboard</a>
+            <a href="all_company_bookings.html">Bookings</a>
+            <a href="payments_list.html">Payments</a>
+            <a href="change_requests_list.html">Change requests</a>
+            <a href="review_release_refunds.html">Refunds</a>
+            <a href="manage_services_rates.html">Services & rates</a><a href="booking_payment_reports.html">Reports</a>
+            <a href="manage_staff_accounts.html">Staff</a>
+            <a href="business_system_settings.html">Settings</a></nav>
+            <a class="portal-badge" href="owner_dashboard.html">OWNER</a>
     </header>
     <main id="main" class="page-shell">
         <header class="page-heading">
@@ -30,10 +35,14 @@
             <p>Inspect a complete booking record and its management history.</p>
         </header>
         <div class="live-message" id="live-message" aria-live="polite" aria-atomic="true"></div>
+        <!--Booking details-->
         <div class="detail-grid">
+            <!--Populate with real user input-->
             <section class="surface content-card">
                 <h2>Booking reference</h2>
-                <h2 class="reference">BTT-000121</h2><span class="status-pill status-approved">Confirmed</span>
+                <h2 class="reference">[placeholder]</h2>
+                <!--status pill; changed the class name for consistency-->
+                <span class="status-pill">[status]</span>
                 <dl class="summary-list">
                     <div>
                         <dt>Customer</dt>
@@ -70,9 +79,10 @@
             <section class="surface content-card">
                 <h2>Management actions</h2>
                 <p>Review the audit history or initiate a company cancellation when authorized.</p>
-                <div class="actions"><a class="button button-primary" href="management_audit_trail.html">View audit
-                        trail</a><a class="button button-soft" href="company_cancellation_refund.html">Cancel &
-                        refund</a><a class="button button-soft" href="all_company_bookings.html">Back to bookings</a>
+                <div class="actions">
+                    <a class="button button-primary" href="management_audit_trail.html">View audit trail</a>
+                    <a class="button button-soft" href="company_cancellation_refund.html">Cancel & refund</a>
+                    <a class="button button-soft" href="all_company_bookings.html">Back to bookings</a>
                 </div>
             </section>
         </div>
