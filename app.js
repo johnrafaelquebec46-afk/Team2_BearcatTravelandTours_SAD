@@ -47,7 +47,7 @@
     "payment-proof-received": "SUBMITTED", "payment-not-verified": "NOT VERIFIED",
     "payment-deadline-passed": "EXPIRED", "booking-closed": "CLOSED", "booking-confirmed": "CONFIRMED"
   };
-  if (badge) badge.textContent = badgeText[page] || "CUSTOMER PORTAL";
+  if (badge && !document.body.dataset.role) badge.textContent = badgeText[page] || "CUSTOMER PORTAL";
 
   const localToday = () => {
     const now = new Date();
@@ -665,5 +665,111 @@
     if (!messageForm.reportValidity()) return;
     messageForm.reset();
     announce("Demo message prepared. No message was sent or stored.");
+  });
+})();
+
+
+(() => {
+  const announce = (text) => { const live = document.getElementById("live-message"); if (live) live.textContent = text; };
+  const go = (target) => { window.location.href = target; };
+  "use strict";
+  // Staff and owner demo interactions (kept in the shared application script).
+  document.querySelectorAll(".demo-form").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const message = document.getElementById("live-message");
+      const passwords = form.querySelectorAll('input[type="password"]');
+      if (form.dataset.next && passwords.length === 2 && passwords[0].value !== passwords[1].value) {
+        if (message) message.textContent = "The two passwords do not match. Please re-enter them.";
+        passwords[1].focus();
+        return;
+      }
+      if (message) message.textContent = "Demo action saved. No real account, payment, email or booking data was changed.";
+      if (form.dataset.next) setTimeout(() => go(form.dataset.next), 600);
+    });
+  });
+  document.querySelectorAll("[data-toggle-password]").forEach((toggle) => {
+    toggle.addEventListener("change", () => {
+      const password = toggle.closest("form")?.querySelector('input[type="password"], input[data-password]');
+      if (password) password.type = toggle.checked ? "text" : "password";
+    });
+  });
+  document.querySelectorAll("[data-export]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const message = document.getElementById("live-message");
+      if (message) message.textContent = `Demo ${button.dataset.export.toUpperCase()} export preview selected. Connect a backend to generate a real report.`;
+    });
+  });
+  // ---- Role handling (demo only: stored in sessionStorage, not real security) ----
+  const ROLE_KEY = "bearcatDemoRole";
+  const NOTICE_KEY = "bearcatDemoNotice";
+  const currentRole = (() => { try { return sessionStorage.getItem(ROLE_KEY) || ""; } catch (_) { return ""; } })();
+  const pageRole = document.body.dataset.role;
+  const currentFile = window.location.pathname.split("/").pop() || "index.html";
+  const loginForm = document.querySelector("[data-login-form]");
+  if (loginForm) {
+    loginForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!loginForm.reportValidity()) return;
+      const role = loginForm.querySelector("#login-role").value === "owner" ? "owner" : "staff";
+      try { sessionStorage.setItem(ROLE_KEY, role); } catch (_) {}
+      go(role === "owner" ? "owner_dashboard.html" : "staff_dashboard.html");
+    });
+  }
+  if (pageRole === "owner" && currentRole === "staff") {
+    try { sessionStorage.setItem(NOTICE_KEY, "That page is for management / owner accounts only."); } catch (_) {}
+    go("staff_dashboard.html");
+  }
+  try {
+    const notice = sessionStorage.getItem(NOTICE_KEY);
+    if (notice) { sessionStorage.removeItem(NOTICE_KEY); announce(notice); }
+  } catch (_) {}
+  if (pageRole === "staff" && currentRole === "owner") {
+    const ownerLinks = [["owner_dashboard.html", "Dashboard"], ["all_company_bookings.html", "Bookings"], ["payments_list.html", "Payments"], ["change_requests_list.html", "Change requests"], ["review_release_refunds.html", "Refunds"], ["manage_services_rates.html", "Services & rates"], ["booking_payment_reports.html", "Reports"], ["manage_staff_accounts.html", "Staff"], ["business_system_settings.html", "Settings"]];
+    const nav = document.getElementById("primary-nav");
+    if (nav) {
+      nav.setAttribute("aria-label", "Owner navigation");
+      nav.innerHTML = ownerLinks.map(([href, label]) => `<a href="${href}">${label.replace("&", "&amp;")}</a>`).join("");
+    }
+    const ownerBadge = document.querySelector(".portal-badge");
+    if (ownerBadge) { ownerBadge.textContent = "OWNER"; ownerBadge.setAttribute("href", "owner_dashboard.html"); }
+    document.querySelectorAll('a[href="staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
+  }
+  if (pageRole === "staff" || pageRole === "owner") {
+    document.querySelectorAll("#primary-nav a").forEach((link) => {
+      if (link.getAttribute("href") === currentFile) link.setAttribute("aria-current", "page");
+    });
+  }
+
+  // ---- "Edit" buttons fill the form beside the table ----
+  document.querySelectorAll("[data-edit-row]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const form = document.querySelector(link.getAttribute("href"));
+      if (!form) return;
+      event.preventDefault();
+      const cells = [...link.closest("tr").children].map((td) => td.textContent.trim());
+      const names = (form.dataset.fields || "").split(",");
+      const values = form.id === "staff-form"
+        ? { name: cells[0], email: cells[1], role: cells[2], active: cells[3] }
+        : { type: cells[1], name: cells[0], rate: cells[2], unit: cells[3], deposit: cells[4], active: cells[5] };
+      const controls = [...form.querySelectorAll("input, select, textarea")];
+      controls.forEach((control, i) => {
+        const key = names[i];
+        if (!(key in values)) return;
+        const value = values[key];
+        if (control.type === "checkbox") control.checked = /^yes/i.test(value);
+        else if (control.tagName === "SELECT") {
+          const wanted = value.toLowerCase();
+          const option = [...control.options].find((o) => o.text.toLowerCase() === wanted) || [...control.options].find((o) => wanted.startsWith(o.text.toLowerCase()));
+          if (option) control.selectedIndex = option.index;
+        } else if (control.type === "number") control.value = value.replace(/[^0-9.]/g, "");
+        else control.value = value;
+      });
+      const password = form.querySelector('input[type="password"]');
+      if (password) { password.required = false; password.placeholder = "Leave blank to keep current password"; }
+      controls[0].focus();
+      announce(`Editing ${values.name}. Change the fields and save.`);
+    });
   });
 })();

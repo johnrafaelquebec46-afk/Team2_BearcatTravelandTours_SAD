@@ -240,3 +240,14 @@ form input:focus, form select:focus, form textarea:focus { transform: translateY
 .travel-leg-fields .hint { margin: -.45rem 0 0; }
 .calendar-day.past { background: #f7dede; color: #78565c; box-shadow: var(--shadow-inset); cursor: not-allowed; }
 @media(max-width:700px) { .grid-form .travel-direction { grid-column: auto; } }
+
+/* Staff and owner portal components */
+.stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin:1.2rem 0}.stat-card{display:grid;gap:.2rem;padding:1.2rem;color:var(--ink);text-decoration:none}.stat-value{font-size:2rem;font-weight:900;line-height:1.2}.card-grid.three{margin:1.2rem 0}.table-wrap{width:100%;overflow-x:auto;border-radius:.8rem}table{width:100%;border-collapse:collapse;min-width:640px;background:#fffafa}th,td{padding:.8rem .75rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}th{background:#f3e8f2;color:#493453;font-size:.82rem;letter-spacing:.035em}td{font-size:.92rem}.table-wrap .button{min-height:2.25rem;padding:.4rem .7rem;font-size:.84rem}.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.2rem;align-items:start}.reference{font-size:1.7rem;letter-spacing:.02em}.check-label{display:flex!important;align-items:center;gap:.55rem;font-weight:650!important}.check-label input{width:1.05rem;min-height:1.05rem;box-shadow:none}.form-card .check-label{margin:.2rem 0}.form-card .form-actions{grid-column:1/-1}.form-card .form-actions .button{border:1px solid rgba(101,76,114,.18)}.form-card .form-actions button{font:inherit}.form-card hr{width:100%;border:0;border-top:1px solid var(--line)}.site-footer{text-align:center}.site-footer p{margin:0}.portal-badge{color:var(--accent-strong)}.primary-nav{flex-wrap:wrap}.primary-nav a{font-size:.82rem}.hero-grid .form-card{align-content:start}
+@media(max-width:900px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.site-header{flex-wrap:wrap}.primary-nav{order:3;flex-basis:100%;justify-content:flex-start}.detail-grid{grid-template-columns:1fr}}
+@media(max-width:620px){.page-heading{width:100%}.page-heading h1{font-size:2rem}.stats-grid,.card-grid.three,.card-grid.two,.hero-grid,.review-grid,.success-grid,.track-grid,.approval-grid,.payment-grid,.confirm-grid{grid-template-columns:1fr}.site-header{gap:.7rem}.primary-nav{overflow-x:auto;flex-wrap:nowrap}.portal-badge{margin-left:auto}.stat-value{font-size:1.65rem}}
+
+/* Added: classes used in the HTML that had no styles */
+.approval-summary,.payment-summary{align-content:start}
+.traveler-entry-form{display:grid;gap:1rem}
+.traveler-actions{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:flex-end;margin-top:1rem}
+.calendar-day.selected{border-color:#78638a;background:var(--lavender);box-shadow:var(--shadow-inset)}
