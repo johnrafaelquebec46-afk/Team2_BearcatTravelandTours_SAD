@@ -306,7 +306,7 @@
 
         const serviceLabel = serviceInput?.options?.[serviceInput.selectedIndex]?.text || serviceInput?.value || "Tour Package";
         BearcatBookingFlow.writeDraft({
-          customer: { full_name: fullName, email, contact_no: contactNo },
+          customer: { full_name: fullName, age: document.getElementById("customer-age")?.value || "", email, contact_no: contactNo },
           item: {
             service_label: BearcatIntegrity.sanitize(serviceLabel, 100),
             trip_type: tripType,
@@ -413,7 +413,7 @@
       }
     }
   }
-  
+
   // ARA
   const BearcatPostBooking = {
     verifyBookingOwnership(ref, email = null) {
