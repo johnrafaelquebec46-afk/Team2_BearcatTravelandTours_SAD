@@ -361,6 +361,64 @@
     true
   );
 
+  // Populate Booking Review summary & estimated cost from saved draft
+  if (document.querySelector("[data-submit-booking]")) {
+    const draft = BearcatBookingFlow.readDraft();
+    const cust = draft.customer || {};
+    const item = draft.item || {};
+    const travelers = Array.isArray(draft.travelers) ? draft.travelers : [];
+    const service = BearcatBookingFlow.resolveService(item.service_label || "");
+
+    const paxQty = Math.max(1, Number(item.pax_qty) || travelers.length || 1);
+    const unitRate = Number(service?.base_rate) || 0;
+    const multiplier = item.trip_type === "round-trip" ? 2 : 1;
+    const subtotal = unitRate * (service?.rate_unit === "per pax" ? paxQty : 1) * multiplier;
+    const depositPct = Number(service?.deposit_percent) || 30;
+    const depositAmt = (subtotal * depositPct) / 100;
+    const fmtPHP = (n) => `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    // Replace summary rows by matching left-hand label text
+    document.querySelectorAll("div, li, tr").forEach((row) => {
+      if (row.children.length !== 2) return;
+      const label = row.children[0].textContent.trim();
+      const valEl = row.children[1];
+
+      if (label === "Customer" && cust.full_name) valEl.textContent = cust.full_name;
+      if (label === "Service" && (item.service_label || service?.service_name)) {
+        valEl.textContent = item.service_label || service.service_name;
+      }
+      if (label === "Route" && item.pickup_location && item.destination) {
+        valEl.textContent = `${item.pickup_location} → ${item.destination}`;
+      }
+      if (label === "Service estimate" && unitRate > 0) valEl.textContent = fmtPHP(unitRate);
+      if (label === "Estimated total" && subtotal > 0) valEl.textContent = fmtPHP(subtotal);
+      if (label === "Deposit requirement" && unitRate > 0) valEl.textContent = `${depositPct}%`;
+      if (label === "Estimated down payment" && depositAmt > 0) valEl.textContent = fmtPHP(depositAmt);
+    });
+
+    // Replace Traveler list placeholders
+    if (travelers.length > 0) {
+      const listHeading = [...document.querySelectorAll("h2, h3, h4, p, strong")].find(
+        (el) => el.textContent.trim() === "Traveler list"
+      );
+      const container = listHeading?.parentElement;
+      if (container) {
+        const existingItems = [...container.querySelectorAll("p, li, div")].filter(
+          (el) => el !== listHeading && /^Traveler\s+\d+/i.test(el.textContent.trim())
+        );
+        if (existingItems.length > 0) {
+          const template = existingItems[0].cloneNode(true);
+          existingItems.forEach((el) => el.remove());
+          travelers.forEach((t, i) => {
+            const line = template.cloneNode(true);
+            line.textContent = `Traveler ${i + 1} · ${t.full_name} · ${t.birthdate} · ${t.id_no}`;
+            container.appendChild(line);
+          });
+        }
+      }
+    }
+  }
+
   // Capture-phase final commit on Booking Review page
   document.addEventListener(
     "click",
@@ -412,6 +470,145 @@
         if (matchOpt) serviceEl.value = matchOpt.value;
       }
     }
+  }
+  // Auto-save & auto-restore Traveler Details cards (even when clicking Back)
+  const travelerEntryForm = document.querySelector(".traveler-entry-form");
+  if (travelerEntryForm) {
+    const syncTravelerDraft = () => {
+      const cards = [...travelerEntryForm.querySelectorAll("[data-traveler-card]")];
+      const rawTravelers = cards.map((card) => {
+        const tName = BearcatIntegrity.sanitize(card.querySelector('input[name$="[name]"]')?.value, 100);
+        const tBirth = card.querySelector('input[name$="[birthdate]"]')?.value || "";
+        const tIdType = BearcatIntegrity.sanitize(card.querySelector('select[name$="[idType]"]')?.value, 30);
+        const tIdNum = BearcatIntegrity.sanitize(card.querySelector('input[name$="[idNumber]"]')?.value, 35);
+        return {
+          full_name: tName,
+          birthdate: tBirth,
+          id_type: tIdType,
+          id_number: tIdNum,
+          id_no: tIdType ? `${tIdType.toUpperCase()}:${tIdNum}` : tIdNum
+        };
+      });
+      BearcatBookingFlow.writeDraft({ travelers: rawTravelers });
+    };
+
+const restoreTravelerDraft = () => {
+      const savedDraft = BearcatBookingFlow.readDraft();
+      if (!Array.isArray(savedDraft.travelers) || savedDraft.travelers.length === 0) return;
+
+      const cards = [...travelerEntryForm.querySelectorAll("[data-traveler-card]")];
+      savedDraft.travelers.forEach((t, idx) => {
+        const card = cards[idx];
+        if (!card) return;
+        const nameInput = card.querySelector('input[name$="[name]"]');
+        const birthInput = card.querySelector('input[name$="[birthdate]"]');
+        const idTypeSelect = card.querySelector('select[name$="[idType]"]');
+        const idNumInput = card.querySelector('input[name$="[idNumber]"]');
+
+        if (nameInput && t.full_name) nameInput.value = t.full_name;
+        if (birthInput && t.birthdate) birthInput.value = t.birthdate;
+
+        // Parse fallback from id_no (e.g. "PASSPORT:123456") if id_type/id_number weren't split
+        let savedType = t.id_type || "";
+        let savedNum = t.id_number || "";
+        if (!savedType && typeof t.id_no === "string" && t.id_no.includes(":")) {
+          const [rawType, ...rest] = t.id_no.split(":");
+          savedType = rawType;
+          savedNum = rest.join(":");
+        } else if (!savedNum && t.id_no) {
+          savedNum = t.id_no;
+        }
+
+        if (idTypeSelect && savedType) {
+          const matchOpt = [...idTypeSelect.options].find(
+            (o) => o.value.toLowerCase() === savedType.toLowerCase() || o.text.toLowerCase() === savedType.toLowerCase()
+          );
+          if (matchOpt) {
+            idTypeSelect.value = matchOpt.value;
+            idTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+        if (idNumInput && savedNum) {
+          idNumInput.disabled = false;
+          idNumInput.value = savedNum;
+        }
+      });
+    };
+
+    setTimeout(restoreTravelerDraft, 80);
+    travelerEntryForm.addEventListener("input", syncTravelerDraft);
+    travelerEntryForm.addEventListener("change", syncTravelerDraft);
+  }
+
+  // Auto-save & auto-restore Accompanying Guardian modal details
+  const guardianModal = document.getElementById("guardian-confirmation");
+  if (guardianModal) {
+    const syncGuardianDraft = () => {
+      const adultSelect = document.getElementById("guardian-adult-traveler");
+      const relInputs = [...guardianModal.querySelectorAll('input[type="text"], textarea')];
+      const fileInputs = [...guardianModal.querySelectorAll('input[type="file"]')];
+
+      BearcatBookingFlow.writeDraft({
+        guardian: {
+          adultValue: adultSelect?.value || "",
+          adultText: adultSelect?.options?.[adultSelect.selectedIndex]?.text || "",
+          relationships: relInputs.map((inp) => BearcatIntegrity.sanitize(inp.value, 150)),
+          proofNames: fileInputs.map((inp) => inp.files?.[0]?.name || "")
+        }
+      });
+    };
+
+    const restoreGuardianDraft = () => {
+      const saved = BearcatBookingFlow.readDraft().guardian;
+      if (!saved) return;
+
+      const adultSelect = document.getElementById("guardian-adult-traveler");
+      if (adultSelect && (saved.adultValue || saved.adultText)) {
+        const match = [...adultSelect.options].find(
+          (o) => (saved.adultValue && o.value === saved.adultValue) || (saved.adultText && o.text === saved.adultText)
+        );
+        if (match) {
+          adultSelect.value = match.value;
+          adultSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+
+      const relInputs = [...guardianModal.querySelectorAll('input[type="text"], textarea')];
+      if (Array.isArray(saved.relationships)) {
+        relInputs.forEach((inp, i) => {
+          if (saved.relationships[i]) inp.value = saved.relationships[i];
+        });
+      }
+
+      const fileInputs = [...guardianModal.querySelectorAll('input[type="file"]')];
+      if (Array.isArray(saved.proofNames)) {
+        fileInputs.forEach((inp, i) => {
+          const prevName = saved.proofNames[i];
+          if (!prevName) return;
+          inp.required = false;
+          inp.dataset.hasSavedProof = "true";
+          let note = inp.parentElement?.querySelector(".btt-saved-proof-note");
+          if (!note) {
+            note = document.createElement("small");
+            note.className = "btt-saved-proof-note";
+            note.style.display = "block";
+            note.style.marginTop = "6px";
+            note.style.fontWeight = "600";
+            note.style.color = "#2e6f40";
+            inp.insertAdjacentElement("afterend", note);
+          }
+          note.textContent = `✓ Saved file: ${prevName} (no need to re-upload unless changing file)`;
+        });
+      }
+    };
+
+    guardianModal.addEventListener("input", syncGuardianDraft);
+    guardianModal.addEventListener("change", syncGuardianDraft);
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-next], [data-confirm-guardian], button[type='submit']")) {
+        setTimeout(restoreGuardianDraft, 60);
+      }
+    });
   }
 
   // ARA
@@ -517,6 +714,8 @@
       return { ok: true };
     }
   };
+
+
 
   // Pre-fill active booking reference on post-booking forms if available
   const activeSavedRef = (() => {
