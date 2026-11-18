@@ -14,6 +14,100 @@
   const saveStatus = (value) => { try { sessionStorage.setItem(STATUS_KEY, String(value).toLowerCase()); } catch (_) {} };
   const announce = (text) => { const live = document.getElementById("live-message"); if (live) live.textContent = text; };
   const go = (target) => { window.location.href = target; };
+  //ARA
+  // =========================================================================
+  // PHASE 1: CLIENT-SIDE DATA INTEGRITY & SQL-ALIGNED STORAGE LAYER
+  // =========================================================================
+  const DB_KEYS = {
+    CUSTOMERS: "btt_db_customers",
+    SERVICES: "btt_db_services",
+    BOOKINGS: "btt_db_bookings",
+    BOOKING_ITEMS: "btt_db_booking_items",
+    TRAVELERS: "btt_db_travelers",
+    PAYMENTS: "btt_db_payments",
+    CHANGES: "btt_db_booking_changes"
+  };
+
+  const BearcatIntegrity = {
+    sanitize(value, maxLen = 255) {
+      return String(value ?? "")
+        .replace(/[<>"'`]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, maxLen);
+    },
+    isValidEmail(email) {
+      const clean = this.sanitize(email, 100);
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean);
+    },
+    isValidPHContact(phone) {
+      const clean = String(phone ?? "").replace(/[\s\-()]/g, "");
+      return /^(09|\+639)\d{9}$/.test(clean) && clean.length <= 20;
+    },
+    isValidIdNumber(idNo) {
+      const clean = this.sanitize(idNo, 50);
+      return /^[A-Za-z0-9\-]{4,50}$/.test(clean);
+    },
+    isValidCurrency(amount, allowZero = true) {
+      const num = Number(amount);
+      if (!Number.isFinite(num)) return false;
+      return allowZero ? num >= 0 : num > 0;
+    },
+    validateProofFile(file) {
+      if (!file) return { ok: false, message: "Upload a valid payment proof file." };
+      const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (!allowedTypes.includes(file.type)) {
+        return { ok: false, message: "Invalid file format. Only JPG, PNG, WEBP, or PDF are allowed." };
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        return { ok: false, message: "Payment proof exceeds the 5MB maximum file size." };
+      }
+      return { ok: true };
+    },
+    generateBookingRef() {
+      const datePart = localToday().replace(/-/g, "");
+      const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+      return `BTT-${datePart}-${randPart}`;
+    }
+  };
+
+  const BearcatStore = {
+    readTable(key) {
+      try {
+        const raw = localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        return [];
+      }
+    },
+    writeTable(key, rows) {
+      try {
+        localStorage.setItem(key, JSON.stringify(rows));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    },
+    seedServices() {
+      const existing = this.readTable(DB_KEYS.SERVICES);
+      if (existing.length > 0) return existing;
+      const defaults = [
+        { service_id: 1, service_type: "Tour Package", service_name: "El Nido Island Hopping Tour", base_rate: 2500.00, rate_unit: "per pax", deposit_percent: 30, is_available: true },
+        { service_id: 2, service_type: "Van Rental", service_name: "Private Airport / City Van Transfer", base_rate: 3500.00, rate_unit: "per trip", deposit_percent: 50, is_available: true },
+        { service_id: 3, service_type: "Custom Itinerary", service_name: "Coron & Palawan Multi-Day Package", base_rate: 6800.00, rate_unit: "per pax", deposit_percent: 30, is_available: true }
+      ];
+      this.writeTable(DB_KEYS.SERVICES, defaults);
+      return defaults;
+    },
+    findBookingByRef(ref) {
+      const target = BearcatIntegrity.sanitize(ref, 50).toUpperCase();
+      return this.readTable(DB_KEYS.BOOKINGS).find((b) => String(b.booking_ref).toUpperCase() === target) || null;
+    }
+  };
+
+  BearcatStore.seedServices();
+  window.BearcatClientAPI = { DB_KEYS, BearcatIntegrity, BearcatStore };
 
   document.querySelectorAll(".booking-reference, #booking-reference").forEach((node) => { node.textContent = readRef(); });
 
