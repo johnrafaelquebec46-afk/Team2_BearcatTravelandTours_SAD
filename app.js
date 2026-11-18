@@ -385,6 +385,35 @@
   );
 
   window.BearcatClientAPI.BearcatBookingFlow = BearcatBookingFlow;
+
+  // Auto-restore saved draft values when navigating back to Booking Details
+  if (document.getElementById("booking-details-form") || document.querySelector('[data-page-form="booking-details"]')) {
+    const savedDraft = BearcatBookingFlow.readDraft();
+    if (savedDraft.customer) {
+      const nameEl = document.getElementById("customer-name");
+      const ageEl = document.getElementById("customer-age");
+      const emailEl = document.getElementById("customer-email");
+      const phoneEl = document.getElementById("customer-phone");
+      if (nameEl && savedDraft.customer.full_name) nameEl.value = savedDraft.customer.full_name;
+      if (ageEl && savedDraft.customer.age) ageEl.value = savedDraft.customer.age;
+      if (emailEl && savedDraft.customer.email) emailEl.value = savedDraft.customer.email;
+      if (phoneEl && savedDraft.customer.contact_no) phoneEl.value = savedDraft.customer.contact_no;
+    }
+    if (savedDraft.item) {
+      const pickupEl = document.getElementById("pickup");
+      const destEl = document.getElementById("destination");
+      const paxEl = document.getElementById("pax");
+      const serviceEl = document.getElementById("trip-service");
+      if (pickupEl && savedDraft.item.pickup_location) pickupEl.value = savedDraft.item.pickup_location;
+      if (destEl && savedDraft.item.destination) destEl.value = savedDraft.item.destination;
+      if (paxEl && savedDraft.item.pax_qty) paxEl.value = savedDraft.item.pax_qty;
+      if (serviceEl && savedDraft.item.service_label) {
+        const matchOpt = [...serviceEl.options].find((o) => o.text === savedDraft.item.service_label || o.value === savedDraft.item.service_label);
+        if (matchOpt) serviceEl.value = matchOpt.value;
+      }
+    }
+  }
+  
   // ARA
   const BearcatPostBooking = {
     verifyBookingOwnership(ref, email = null) {
