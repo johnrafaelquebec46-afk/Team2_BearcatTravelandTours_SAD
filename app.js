@@ -1,0 +1,775 @@
+(() => {
+  "use strict";
+  const REF_KEY = "bearcatCustomerDemoReference";
+  const STATUS_KEY = "bearcatCustomerDemoStatus";
+  const PAX_KEY = "bearcatCustomerDemoPax";
+  const TRAVELER_COUNT_KEY = "bearcatCustomerDemoTravelerCount";
+  const TRIP_DATE_KEY = "bearcatCustomerDemoTripDate";
+  const TRIP_TYPE_KEY = "bearcatCustomerDemoTripType";
+  const RETURN_DATE_KEY = "bearcatCustomerDemoReturnDate";
+  const DEPARTURE_SCHEDULE_KEY = "bearcatCustomerDemoDepartureSchedule";
+  const RETURN_SCHEDULE_KEY = "bearcatCustomerDemoReturnSchedule";
+  const MINOR_TRAVELER_KEY = "bearcatCustomerDemoMinorTraveler";
+  const readRef = () => { try { return sessionStorage.getItem(REF_KEY) || "BTT-DEMO01"; } catch (_) { return "BTT-DEMO01"; } };
+  const saveStatus = (value) => { try { sessionStorage.setItem(STATUS_KEY, String(value).toLowerCase()); } catch (_) {} };
+  const announce = (text) => { const live = document.getElementById("live-message"); if (live) live.textContent = text; };
+  const go = (target) => { window.location.href = target; };
+
+  document.querySelectorAll(".booking-reference, #booking-reference").forEach((node) => { node.textContent = readRef(); });
+
+  const page = document.body.dataset.page;
+  const activeNav = new Map([
+    ["index", "Home"], ["services", "Services"], ["service-details", "Services"],
+    ["availability", "Booking request"], ["booking-details", "Booking request"],
+    ["booking-details-error", "Booking request"], ["saved-draft", "Booking request"],
+    ["traveler-details", "Booking request"], ["traveler-details-three", "Booking request"],
+    ["booking-review", "Booking request"], ["track-booking", "Track booking"],
+    ["track-not-found", "Track booking"], ["booking-pending", "Track booking"],
+    ["status-timeline", "Track booking"], ["request-approved", "Track booking"],
+    ["submit-payment", "Track booking"], ["payment-submitted", "Track booking"],
+    ["payment-proof-received", "Track booking"], ["payment-not-verified", "Track booking"],
+    ["payment-deadline-passed", "Track booking"], ["booking-closed", "Track booking"],
+    ["booking-confirmed", "Track booking"], ["change-request", "Track booking"],
+    ["change-request-received", "Track booking"], ["change-approved", "Track booking"],
+    ["change-not-approved", "Track booking"], ["cancellation-request", "Track booking"],
+    ["cancellation-result", "Track booking"], ["contact-us", "Track booking"]
+  ]);
+  document.querySelectorAll("#primary-nav a").forEach((link) => {
+    link.removeAttribute("aria-current");
+    if (link.textContent.trim() === activeNav.get(page)) link.setAttribute("aria-current", "page");
+  });
+  const badge = document.querySelector(".portal-badge");
+  const badgeText = {
+    availability: "STEP 1 OF 3", "booking-details": "STEP 1 OF 3", "booking-details-error": "STEP 1 OF 3",
+    "saved-draft": "DRAFT SAVED", "traveler-details": "STEP 2 OF 3", "traveler-details-three": "STEP 2 OF 3",
+    "booking-review": "STEP 3 OF 3", "booking-success": "PENDING", "booking-pending": "PENDING",
+    "request-approved": "APPROVED", "submit-payment": "1-HOUR DEADLINE", "payment-submitted": "1-HOUR DEADLINE",
+    "payment-proof-received": "SUBMITTED", "payment-not-verified": "NOT VERIFIED",
+    "payment-deadline-passed": "EXPIRED", "booking-closed": "CLOSED", "booking-confirmed": "CONFIRMED"
+  };
+  if (badge && !document.body.dataset.role) badge.textContent = badgeText[page] || "CUSTOMER PORTAL";
+
+  const localToday = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  };
+  const tripDateField = document.getElementById("trip-date") || document.getElementById("error-date");
+  const returnDateField = document.querySelector('[data-return-leg] [data-travel-date]');
+  const tripTypeRadios = [...document.querySelectorAll('input[name="tripType"]')];
+  const departureScheduleField = document.querySelector('[name="departureSchedule"]');
+  const returnScheduleField = document.querySelector('[name="returnSchedule"]');
+  const returnLeg = document.querySelector("[data-return-leg]");
+  const updateTripType = () => {
+    const isRoundTrip = tripTypeRadios.find((radio) => radio.checked)?.value === "round-trip";
+    if (returnLeg) returnLeg.hidden = !isRoundTrip;
+    if (returnDateField) returnDateField.required = isRoundTrip;
+    if (returnScheduleField) returnScheduleField.required = isRoundTrip;
+  };
+  document.querySelectorAll("[data-travel-date]").forEach((field) => { field.min = localToday(); });
+  if (tripDateField) {
+    try {
+      const savedDeparture = sessionStorage.getItem(TRIP_DATE_KEY) || "";
+      tripDateField.value = savedDeparture >= localToday() ? savedDeparture : "";
+      if (savedDeparture && savedDeparture < localToday()) sessionStorage.removeItem(TRIP_DATE_KEY);
+    } catch (_) {}
+  }
+  if (returnDateField) {
+    try {
+      const savedReturn = sessionStorage.getItem(RETURN_DATE_KEY) || "";
+      returnDateField.value = savedReturn >= localToday() ? savedReturn : "";
+      if (savedReturn && savedReturn < localToday()) sessionStorage.removeItem(RETURN_DATE_KEY);
+    } catch (_) {}
+  }
+  if (tripTypeRadios.length) {
+    try {
+      const savedType = sessionStorage.getItem(TRIP_TYPE_KEY);
+      const radio = tripTypeRadios.find((item) => item.value === savedType);
+      if (radio) radio.checked = true;
+    } catch (_) {}
+    tripTypeRadios.forEach((radio) => radio.addEventListener("change", updateTripType));
+    updateTripType();
+  }
+  try {
+    if (departureScheduleField) departureScheduleField.value = sessionStorage.getItem(DEPARTURE_SCHEDULE_KEY) || "";
+    if (returnScheduleField) returnScheduleField.value = sessionStorage.getItem(RETURN_SCHEDULE_KEY) || "";
+  } catch (_) {}
+  if (tripDateField && returnDateField) {
+    returnDateField.min = tripDateField.value || localToday();
+    tripDateField.addEventListener("change", () => {
+      returnDateField.min = tripDateField.value || localToday();
+      if (returnDateField.value && returnDateField.value < returnDateField.min) returnDateField.value = "";
+    });
+  }
+  const minorTravelerRadios = [...document.querySelectorAll('input[name="minorTraveler"]')];
+  const minorTravelerHint = document.getElementById("minor-traveler-hint");
+  const updateMinorTravelerHint = () => {
+    const selected = minorTravelerRadios.find((radio) => radio.checked)?.value;
+    if (minorTravelerHint) minorTravelerHint.hidden = selected !== "yes";
+  };
+  if (minorTravelerRadios.length) {
+    try {
+      const savedChoice = sessionStorage.getItem(MINOR_TRAVELER_KEY);
+      const savedRadio = minorTravelerRadios.find((radio) => radio.value === savedChoice);
+      if (savedRadio) savedRadio.checked = true;
+    } catch (_) {}
+    minorTravelerRadios.forEach((radio) => radio.addEventListener("change", updateMinorTravelerHint));
+    updateMinorTravelerHint();
+  }
+  const reviewTripType = document.getElementById("review-trip-type");
+  if (reviewTripType) {
+    const formatTripDate = (value) => value ? new Intl.DateTimeFormat("en", {month:"short", day:"numeric", year:"numeric"}).format(new Date(`${value}T12:00:00`)) : "—";
+    let savedType = "", savedDeparture = "", savedReturn = "", savedDepartureTime = "", savedReturnTime = "";
+    try {
+      savedType = sessionStorage.getItem(TRIP_TYPE_KEY) || "";
+      savedDeparture = sessionStorage.getItem(TRIP_DATE_KEY) || "";
+      savedReturn = sessionStorage.getItem(RETURN_DATE_KEY) || "";
+      savedDepartureTime = sessionStorage.getItem(DEPARTURE_SCHEDULE_KEY) || "";
+      savedReturnTime = sessionStorage.getItem(RETURN_SCHEDULE_KEY) || "";
+    } catch (_) {}
+    reviewTripType.textContent = savedType === "one-way" ? "One way" : savedType === "round-trip" ? "Round trip" : "—";
+    const departureDate = document.getElementById("review-departure-date");
+    const departureTime = document.getElementById("review-departure-schedule");
+    const returnRow = document.getElementById("review-return-row");
+    const returnDate = document.getElementById("review-return-date");
+    const returnTime = document.getElementById("review-return-schedule");
+    if (departureDate) departureDate.textContent = formatTripDate(savedDeparture);
+    if (departureTime) departureTime.textContent = savedDepartureTime || "—";
+    if (returnRow) returnRow.hidden = savedType !== "round-trip";
+    if (returnDate) returnDate.textContent = formatTripDate(savedReturn);
+    if (returnTime) returnTime.textContent = savedReturnTime || "—";
+  }
+
+  const savedTravelerCount = (() => {
+    try { return sessionStorage.getItem(TRAVELER_COUNT_KEY) || sessionStorage.getItem(PAX_KEY) || ""; }
+    catch (_) { return ""; }
+  })();
+  if (savedTravelerCount) {
+    document.querySelectorAll("[data-traveler-count]").forEach((node) => { node.textContent = savedTravelerCount; });
+    const summaryList = document.querySelector("[data-traveler-summary-list]");
+    if (summaryList) {
+      const count = Math.max(1, Number(savedTravelerCount));
+      summaryList.replaceChildren(...Array.from({length: count}, (_, i) => {
+        const item = document.createElement("p");
+        item.textContent = `Traveler ${i + 1} · Name · birthdate · ID`;
+        return item;
+      }));
+    }
+  }
+
+  const menu = document.querySelector(".menu-toggle");
+  const nav = document.getElementById("primary-nav");
+  if (menu && nav) menu.addEventListener("click", () => {
+    const open = menu.getAttribute("aria-expanded") !== "true";
+    menu.setAttribute("aria-expanded", String(open));
+    nav.classList.toggle("is-open", open);
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-go]");
+    if (target) go(target.dataset.go);
+    const submitBooking = event.target.closest("[data-submit-booking]");
+    if (submitBooking) {
+      const newRef = "BTT-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+      try { sessionStorage.setItem(REF_KEY, newRef); } catch (_) {}
+      saveStatus("pending");
+      go("booking_success.html");
+    }
+  });
+
+  document.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("invalid", () => form.classList.add("is-invalid"), true);
+    form.addEventListener("submit", () => { if (!form.checkValidity()) form.classList.add("is-invalid"); }, true);
+    form.addEventListener("input", () => { if (form.checkValidity()) form.classList.remove("is-invalid"); });
+    form.addEventListener("change", () => { if (form.checkValidity()) form.classList.remove("is-invalid"); });
+  });
+
+  let validateDuplicateTravelerIds = () => true;
+  let validateTravelerEligibility = () => true;
+  document.querySelectorAll("form[data-next]").forEach((form) => form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    const ageField = form.querySelector("[name=age]");
+    if (ageField && Number(ageField.value) < 18) {
+      window.alert("You must be 18 years old or older to continue the booking.");
+      ageField.focus();
+      return;
+    }
+    if (form.classList.contains("traveler-entry-form") && !validateDuplicateTravelerIds(true)) {
+      form.querySelector('[data-id-number][aria-invalid="true"]')?.focus();
+      return;
+    }
+    if (form.classList.contains("traveler-entry-form") && !validateTravelerEligibility()) return;
+    if (form.id === "availability-form") {
+      const selectedDate = document.getElementById("calendar-selected-date");
+      if (!selectedDate || !selectedDate.value || selectedDate.value < localToday()) {
+        announce("Choose a current or future available travel date before continuing.");
+        return;
+      }
+      try { sessionStorage.setItem(TRIP_DATE_KEY, selectedDate.value); } catch (_) {}
+    }
+    if (form.id === "booking-details-form" || form.dataset.pageForm === "booking-details") {
+      const tripType = form.querySelector('input[name="tripType"]:checked')?.value;
+      const departureDate = form.querySelector('[name="departureDate"]')?.value || "";
+      const returnDate = form.querySelector('[name="returnDate"]')?.value || "";
+      if (!tripType) { announce("Choose one-way or round-trip travel."); return; }
+      if (departureDate < localToday() || (tripType === "round-trip" && returnDate < departureDate)) {
+        announce(tripType === "round-trip" ? "Choose a return date on or after the departure date." : "Choose a current or future travel date.");
+        return;
+      }
+      try {
+        sessionStorage.setItem(TRIP_TYPE_KEY, tripType);
+        sessionStorage.setItem(TRIP_DATE_KEY, departureDate);
+        sessionStorage.setItem(DEPARTURE_SCHEDULE_KEY, form.querySelector('[name="departureSchedule"]')?.value || "");
+        if (tripType === "round-trip") {
+          sessionStorage.setItem(RETURN_DATE_KEY, returnDate);
+          sessionStorage.setItem(RETURN_SCHEDULE_KEY, form.querySelector('[name="returnSchedule"]')?.value || "");
+        } else {
+          sessionStorage.removeItem(RETURN_DATE_KEY);
+          sessionStorage.removeItem(RETURN_SCHEDULE_KEY);
+        }
+      } catch (_) {}
+    }
+    const paxField = form.querySelector("#pax, #error-pax");
+    const minorChoice = form.querySelector('input[name="minorTraveler"]:checked');
+    if (minorChoice) {
+      try { sessionStorage.setItem(MINOR_TRAVELER_KEY, minorChoice.value); } catch (_) {}
+    }
+    if (paxField) {
+      try {
+        sessionStorage.setItem(PAX_KEY, String(Math.max(1, Math.floor(Number(paxField.value)))));
+        sessionStorage.removeItem(TRAVELER_COUNT_KEY);
+      } catch (_) {}
+    }
+    if (form.classList.contains("traveler-entry-form")) {
+      const count = form.querySelectorAll("[data-traveler-card]").length;
+      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(count)); } catch (_) {}
+    }
+    go(form.dataset.next);
+  }));
+
+  const travelerForm = document.querySelector(".traveler-entry-form");
+  if (travelerForm) {
+    const list = travelerForm.querySelector("[data-traveler-grid]");
+    const addButton = travelerForm.querySelector("[data-add-traveler]");
+    const overlay = document.getElementById("traveler-confirmation");
+    const dialog = overlay?.querySelector("[role=dialog]");
+    const rejectionOverlay = document.getElementById("traveler-rejection-notification");
+    const rejectionDialog = rejectionOverlay?.querySelector("[role=alertdialog]");
+    const guardianOverlay = document.getElementById("guardian-confirmation");
+    const guardianDialog = guardianOverlay?.querySelector("[role=dialog]");
+    const guardianAdultSelect = document.getElementById("guardian-adult-traveler");
+    const guardianMinorFields = document.getElementById("guardian-minor-fields");
+    const savedPax = (() => { try { return Number(sessionStorage.getItem(PAX_KEY)); } catch (_) { return 0; } })();
+    const paxLimit = Number.isInteger(savedPax) && savedPax > 0 ? savedPax : Number(travelerForm.dataset.initialCount || 1);
+    const savedCount = (() => { try { return Number(sessionStorage.getItem(TRAVELER_COUNT_KEY)); } catch (_) { return 0; } })();
+
+    const cardMarkup = (index) => `<fieldset class="traveler-card" data-traveler-card="${index}">
+      <legend>Traveler ${index}</legend>
+      <label for="traveler-${index}-name">Full name as shown on ID</label>
+      <input id="traveler-${index}-name" name="traveler[${index}][name]" autocomplete="name" placeholder="Traveler full name" required>
+      <div class="inline-fields">
+        <div><label for="traveler-${index}-birth">Birthdate</label><input id="traveler-${index}-birth" name="traveler[${index}][birthdate]" type="date" required></div>
+        <div><label for="traveler-${index}-id-type">Accepted ID type</label><select id="traveler-${index}-id-type" name="traveler[${index}][idType]" data-id-type required><option value="">Select an ID</option><option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option><option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option></select></div>
+      </div>
+      <label for="traveler-${index}-id-number">ID number</label>
+      <input id="traveler-${index}-id-number" name="traveler[${index}][idNumber]" data-id-number type="text" inputmode="numeric" autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-${index}-id-help" placeholder="Select ID type first" required disabled>
+      <p id="traveler-${index}-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
+    </fieldset>`;
+
+    let duplicateErrorWasShown = false;
+    validateDuplicateTravelerIds = (announceError = false) => {
+      list.querySelectorAll("[data-id-number]").forEach((input) => {
+        input.removeAttribute("aria-invalid");
+        input.setAttribute("aria-describedby", input.getAttribute("aria-describedby").split(" ")[0]);
+        input.closest(".traveler-card").querySelector("[data-duplicate-error]")?.remove();
+      });
+      const byNumber = new Map();
+      list.querySelectorAll("[data-id-number]").forEach((input) => {
+        if (input.disabled || !input.value.trim()) return;
+        const number = input.value.replace(/\s+/g, "").toLowerCase();
+        if (!byNumber.has(number)) byNumber.set(number, []);
+        byNumber.get(number).push(input);
+      });
+
+      let hasDuplicates = false;
+      byNumber.forEach((inputs) => {
+        if (inputs.length < 2) return;
+        hasDuplicates = true;
+        inputs.forEach((input) => {
+          const card = input.closest(".traveler-card");
+          const ownNumber = card.dataset.travelerCard;
+          const matches = inputs.filter((other) => other !== input).map((other) => `Traveler ${other.closest(".traveler-card").dataset.travelerCard}`);
+          const error = document.createElement("p");
+          const errorId = `traveler-${ownNumber}-duplicate-error`;
+          error.id = errorId;
+          error.className = "error-text duplicate-id-error";
+          error.dataset.duplicateError = "true";
+          error.textContent = `This ID number matches ${matches.join(" and ")}. Each traveler must have a different ID number.`;
+          card.querySelector(".id-help").before(error);
+          input.setAttribute("aria-invalid", "true");
+          input.setAttribute("aria-describedby", `${input.getAttribute("aria-describedby")} ${errorId}`);
+        });
+      });
+
+      if (hasDuplicates && announceError) announce("Duplicate traveler ID numbers were found. Correct the highlighted entries before continuing.");
+      if (!hasDuplicates && duplicateErrorWasShown) announce("Duplicate ID number error cleared.");
+      duplicateErrorWasShown = hasDuplicates;
+      return !hasDuplicates;
+    };
+
+    const configureIdField = (card) => {
+      const select = card.querySelector("[data-id-type]");
+      const input = card.querySelector("[data-id-number]");
+      const hint = card.querySelector(".id-help");
+      const applyType = () => {
+        const option = select.selectedOptions[0];
+        const digits = Number(option?.dataset.maxDigits || 0);
+        input.disabled = !digits;
+        input.maxLength = digits || 16;
+        input.value = input.value.replace(/\D/g, "").slice(0, digits || 16);
+        input.placeholder = digits ? `Enter up to ${digits} digits` : "Select ID type first";
+        hint.textContent = digits ? `Maximum ${digits} digits for this ID type.` : "Select an ID type to see the maximum digit count.";
+      };
+      select.addEventListener("change", applyType);
+      input.addEventListener("input", () => {
+        input.value = input.value.replace(/\D/g, "").slice(0, input.maxLength);
+        if (duplicateErrorWasShown) validateDuplicateTravelerIds(false);
+      });
+      input.addEventListener("blur", () => validateDuplicateTravelerIds(true));
+      select.addEventListener("change", () => { if (duplicateErrorWasShown) validateDuplicateTravelerIds(false); });
+      applyType();
+    };
+
+    const renderTravelers = (count) => {
+      list.innerHTML = Array.from({length: count}, (_, i) => cardMarkup(i + 1)).join("");
+      list.querySelectorAll("[data-traveler-card]").forEach(configureIdField);
+      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(count)); } catch (_) {}
+    };
+
+    const initialCount = Number.isInteger(savedCount) && savedCount >= 1 ? savedCount : paxLimit;
+    renderTravelers(Math.max(1, initialCount));
+
+    let returnFocus = null;
+    let rejectionReturnFocus = null;
+    let guardianReturnFocus = null;
+    let guardianConfirmed = false;
+    let guardianSignature = "";
+    const ageFromBirthdate = (value) => {
+      if (!value) return null;
+      const [year, month, day] = value.split("-").map(Number);
+      const today = new Date();
+      let age = today.getFullYear() - year;
+      if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) age--;
+      return age;
+    };
+    const travelerAgeGroups = () => {
+      const travelers = [...list.querySelectorAll("[data-traveler-card]")].map((card) => ({
+        card,
+        index: card.dataset.travelerCard,
+        name: card.querySelector('[name$="[name]"]').value.trim(),
+        birthdate: card.querySelector('[name$="[birthdate]"]').value,
+        age: ageFromBirthdate(card.querySelector('[name$="[birthdate]"]').value)
+      }));
+      return {minors: travelers.filter((traveler) => traveler.age !== null && traveler.age < 18), adults: travelers.filter((traveler) => traveler.age !== null && traveler.age >= 18)};
+    };
+    const guardianControls = () => guardianOverlay ? [...guardianOverlay.querySelectorAll("[data-guardian-control]")] : [];
+    const addGuardianField = (minor) => {
+      const card = document.createElement("fieldset");
+      card.className = "guardian-minor-card";
+      const legend = document.createElement("legend");
+      legend.textContent = `Traveler ${minor.index}`;
+      card.append(legend);
+
+      const relationId = `guardian-relationship-${minor.index}`;
+      const relationLabel = document.createElement("label");
+      relationLabel.htmlFor = relationId;
+      relationLabel.textContent = `Relationship to Traveler ${minor.index}`;
+      const relation = document.createElement("input");
+      relation.id = relationId;
+      relation.name = `guardian[${minor.index}][relationship]`;
+      relation.type = "text";
+      relation.required = true;
+      relation.disabled = true;
+      relation.setAttribute("form", "traveler-entry-form");
+      relation.dataset.guardianControl = "true";
+      relation.setAttribute("aria-describedby", `guardian-relationship-help-${minor.index}`);
+      const relationHint = document.createElement("p");
+      relationHint.id = `guardian-relationship-help-${minor.index}`;
+      relationHint.className = "hint";
+      relationHint.textContent = minor.name ? `Enter how the selected adult is related to ${minor.name}.` : "Enter the adult’s relationship to this traveler.";
+
+      const proofId = `guardian-proof-${minor.index}`;
+      const proofLabel = document.createElement("label");
+      proofLabel.htmlFor = proofId;
+      proofLabel.textContent = `Supporting proof for Traveler ${minor.index}`;
+      const proof = document.createElement("input");
+      proof.id = proofId;
+      proof.name = `guardian[${minor.index}][proof]`;
+      proof.type = "file";
+      proof.required = true;
+      proof.disabled = true;
+      proof.setAttribute("form", "traveler-entry-form");
+      proof.dataset.guardianControl = "true";
+      proof.setAttribute("aria-describedby", `guardian-proof-help-${minor.index}`);
+      const proofHint = document.createElement("p");
+      proofHint.id = `guardian-proof-help-${minor.index}`;
+      proofHint.className = "hint";
+      proofHint.textContent = "Choose a file that supports the stated relationship. Staff must verify it.";
+
+      card.append(relationLabel, relation, relationHint, proofLabel, proof, proofHint);
+      guardianMinorFields.append(card);
+    };
+    const prepareGuardianDialog = (minors, adults) => {
+      const signature = JSON.stringify({
+        minors: minors.map(({index,name,birthdate}) => ({index,name,birthdate})),
+        adults: adults.map(({index,name,birthdate}) => ({index,name,birthdate}))
+      });
+      if (signature !== guardianSignature) {
+        guardianAdultSelect.replaceChildren(new Option("Select an adult traveler", ""));
+        adults.forEach((adult) => {
+          const option = new Option(`Traveler ${adult.index}${adult.name ? ` · ${adult.name}` : ""}`, adult.index);
+          guardianAdultSelect.add(option);
+        });
+        guardianMinorFields.replaceChildren();
+        minors.forEach(addGuardianField);
+        guardianSignature = signature;
+        guardianConfirmed = false;
+      }
+      guardianControls().forEach((control) => { control.disabled = false; });
+    };
+    const showModal = (modal, modalDialog, focusReturn) => {
+      if (!modal || !modalDialog) return false;
+      focusReturn?.blur?.();
+      modal.hidden = false;
+      document.body.classList.add("confirmation-active");
+      modalDialog.focus();
+      return true;
+    };
+    const closeRejection = () => {
+      if (!rejectionOverlay) return;
+      rejectionOverlay.hidden = true;
+      document.body.classList.remove("confirmation-active");
+      rejectionReturnFocus?.focus();
+    };
+    const closeGuardian = () => {
+      if (!guardianOverlay) return;
+      guardianOverlay.hidden = true;
+      guardianControls().forEach((control) => { control.disabled = true; });
+      document.body.classList.remove("confirmation-active");
+      guardianReturnFocus?.focus();
+    };
+    validateTravelerEligibility = () => {
+      const {minors, adults} = travelerAgeGroups();
+      if (minors.length === 0) {
+        travelerForm.removeAttribute("data-request-state");
+        guardianConfirmed = false;
+        return true;
+      }
+      if (adults.length === 0) {
+        travelerForm.dataset.requestState = "rejected";
+        announce("Request rejected: an under-18 traveler must be accompanied by an adult traveler aged 18 or older.");
+        rejectionReturnFocus = travelerForm.querySelector('[type="submit"]');
+        showModal(rejectionOverlay, rejectionDialog, rejectionReturnFocus);
+        return false;
+      }
+      travelerForm.removeAttribute("data-request-state");
+      if (guardianConfirmed) return true;
+      prepareGuardianDialog(minors, adults);
+      announce("Guardian details and supporting proof are required for the under-18 traveler.");
+      guardianReturnFocus = travelerForm.querySelector('[type="submit"]');
+      showModal(guardianOverlay, guardianDialog, guardianReturnFocus);
+      return false;
+    };
+
+    const closeConfirm = () => {
+      if (!overlay) return;
+      overlay.hidden = true;
+      document.body.classList.remove("confirmation-active");
+      returnFocus?.focus();
+    };
+    const addTraveler = () => {
+      const nextIndex = list.querySelectorAll("[data-traveler-card]").length + 1;
+      list.insertAdjacentHTML("beforeend", cardMarkup(nextIndex));
+      configureIdField(list.querySelector(`[data-traveler-card="${nextIndex}"]`));
+      guardianConfirmed = false;
+      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(nextIndex)); } catch (_) {}
+    };
+    const openConfirm = () => {
+      if (!overlay || !dialog) { announce("The traveler confirmation screen could not be opened."); return; }
+      returnFocus = addButton;
+      overlay.hidden = false;
+      document.body.classList.add("confirmation-active");
+      dialog.focus();
+    };
+
+    addButton?.addEventListener("click", () => {
+      const currentCount = list.querySelectorAll("[data-traveler-card]").length;
+      if (currentCount >= paxLimit) openConfirm(); else addTraveler();
+    });
+    overlay?.querySelector("[data-cancel-add]")?.addEventListener("click", closeConfirm);
+    overlay?.querySelector("[data-confirm-add]")?.addEventListener("click", () => { addTraveler(); closeConfirm(); addButton?.focus(); });
+    overlay?.addEventListener("click", (event) => { if (event.target === overlay) closeConfirm(); });
+    dialog?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") { event.preventDefault(); closeConfirm(); return; }
+      if (event.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll("button:not([disabled])")];
+      if (!focusable.length) return;
+      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1).focus(); }
+      if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0].focus(); }
+    });
+
+    travelerForm.addEventListener("change", (event) => {
+      if (event.target.matches('[name$="[birthdate]"], [name$="[name]"]')) guardianConfirmed = false;
+    });
+    rejectionOverlay?.querySelector("[data-close-rejection]")?.addEventListener("click", closeRejection);
+    rejectionOverlay?.addEventListener("click", (event) => { if (event.target === rejectionOverlay) closeRejection(); });
+    guardianOverlay?.querySelector("[data-cancel-guardian]")?.addEventListener("click", closeGuardian);
+    guardianOverlay?.addEventListener("click", (event) => { if (event.target === guardianOverlay) closeGuardian(); });
+    guardianOverlay?.querySelector("[data-confirm-guardian]")?.addEventListener("click", () => {
+      const controls = guardianControls();
+      const invalid = controls.find((control) => !control.checkValidity());
+      if (invalid) { invalid.reportValidity(); return; }
+      guardianConfirmed = true;
+      controls.forEach((control) => { control.disabled = true; });
+      closeGuardian();
+      travelerForm.requestSubmit();
+    });
+
+    const trapFocus = (modalDialog, closeModal) => modalDialog?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") { event.preventDefault(); closeModal(); return; }
+      if (event.key !== "Tab") return;
+      const focusable = [...modalDialog.querySelectorAll("button:not([disabled]), input:not([disabled]), select:not([disabled])")];
+      if (!focusable.length) return;
+      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1).focus(); }
+      else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0].focus(); }
+    });
+    trapFocus(rejectionDialog, closeRejection);
+    trapFocus(guardianDialog, closeGuardian);
+  }
+
+  const calendar = document.querySelector(".calendar-days");
+  const monthInput = document.getElementById("calendar-month");
+  const selectedDateInput = document.getElementById("calendar-selected-date");
+  const selectedDateDisplay = document.getElementById("selected-date-display");
+  const formatCalendarDate = (iso) => {
+    if (!iso) return "Choose a date";
+    const date = new Date(`${iso}T12:00:00`);
+    return new Intl.DateTimeFormat("en", {month:"short", day:"numeric", year:"numeric"}).format(date);
+  };
+  const renderCalendar = (monthValue, initialSelected = "") => {
+    if (!calendar || !monthValue || !/^\d{4}-\d{2}$/.test(monthValue)) return;
+    const [year, month] = monthValue.split("-").map(Number);
+    const today = localToday();
+    const firstOffset = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const fullDays = new Set([5, 12, 13, 20, 27]);
+    calendar.replaceChildren();
+    for (let i = 0; i < firstOffset; i++) {
+      const blank = document.createElement("span");
+      blank.className = "calendar-empty";
+      blank.setAttribute("aria-hidden", "true");
+      calendar.append(blank);
+    }
+    for (let number = 1; number <= daysInMonth; number++) {
+      const date = `${year}-${String(month).padStart(2,"0")}-${String(number).padStart(2,"0")}`;
+      const isPast = date < today;
+      const isFull = fullDays.has(number);
+      const isSelected = date === initialSelected && !isFull && !isPast;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `calendar-day ${isPast ? "past" : isFull ? "full" : "open"}${isSelected ? " is-selected" : ""}`;
+      button.dataset.calendarDay = String(number);
+      button.dataset.calendarDate = date;
+      button.dataset.availability = isPast ? "past" : isFull ? "full" : "open";
+      button.setAttribute("aria-pressed", String(isSelected));
+      button.setAttribute("aria-label", `Day ${number}, ${isPast ? "PAST, unavailable" : isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}`);
+      button.disabled = isFull || isPast;
+      if (button.disabled) button.setAttribute("aria-disabled", "true");
+      button.innerHTML = `<span>${number}</span><small>${isPast ? "PAST" : isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}</small>`;
+      calendar.append(button);
+    }
+    const validSelected = initialSelected >= today && !fullDays.has(Number(initialSelected.slice(-2)));
+    if (selectedDateInput) selectedDateInput.value = validSelected ? initialSelected : "";
+    if (selectedDateDisplay) selectedDateDisplay.textContent = formatCalendarDate(validSelected ? initialSelected : "");
+  };
+
+  if (monthInput && calendar) {
+    const currentMonth = localToday().slice(0, 7);
+    monthInput.min = currentMonth;
+    let savedDate = selectedDateInput?.value || "";
+    try { savedDate = sessionStorage.getItem(TRIP_DATE_KEY) || savedDate; } catch (_) {}
+    if (/^\d{4}-\d{2}-\d{2}$/.test(savedDate) && savedDate >= localToday()) monthInput.value = savedDate.slice(0, 7);
+    if (monthInput.value < currentMonth) monthInput.value = currentMonth;
+    renderCalendar(monthInput.value, savedDate >= localToday() ? savedDate : "");
+    monthInput.addEventListener("change", () => {
+      if (monthInput.value < localToday().slice(0, 7)) monthInput.value = localToday().slice(0, 7);
+      try { sessionStorage.removeItem(TRIP_DATE_KEY); } catch (_) {}
+      renderCalendar(monthInput.value);
+    });
+  }
+
+  if (calendar) calendar.addEventListener("click", (event) => {
+    const day = event.target.closest("[data-calendar-day]");
+    if (!day || day.disabled || day.dataset.availability === "full") return;
+    calendar.querySelectorAll("[data-calendar-day]").forEach((button) => {
+      button.classList.remove("is-selected");
+      button.setAttribute("aria-pressed", "false");
+      if (!button.disabled) {
+        const label = button.querySelector("small");
+        if (label) label.textContent = "OPEN";
+        button.setAttribute("aria-label", `Day ${button.dataset.calendarDay}, OPEN`);
+      }
+    });
+    day.classList.add("is-selected");
+    day.setAttribute("aria-pressed", "true");
+    const status = day.querySelector("small");
+    if (status) status.textContent = "SELECTED";
+    day.setAttribute("aria-label", `Day ${day.dataset.calendarDay}, SELECTED`);
+    if (selectedDateInput) selectedDateInput.value = day.dataset.calendarDate;
+    if (selectedDateDisplay) selectedDateDisplay.textContent = formatCalendarDate(day.dataset.calendarDate);
+  });
+
+  if (page === "status-timeline") {
+    let status = "pending";
+    try { status = (sessionStorage.getItem(STATUS_KEY) || status).toLowerCase(); } catch (_) {}
+    const aliases = {"payment-deadline-passed":"expired", "booking-closed":"closed", "cancellation-result":"cancelled"};
+    status = aliases[status] || status;
+    const panels = [...document.querySelectorAll("[data-status-panel]")];
+    if (!panels.some((panel) => panel.dataset.statusPanel === status)) status = "pending";
+    panels.forEach((panel) => { panel.hidden = panel.dataset.statusPanel !== status; });
+    const current = panels.find((panel) => panel.dataset.statusPanel === status);
+    const summary = document.getElementById("status-summary");
+    if (summary && current) summary.textContent = `Current status: ${current.querySelector("h2")?.textContent || status}.`;
+  }
+
+  const track = document.querySelector("form[data-track-form]");
+  if (track) track.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!track.reportValidity()) return;
+    const choice = track.elements.status.value;
+    const routes = {pending:"booking_pending.html",approved:"request_approved.html",confirmed:"booking_confirmed.html",expired:"payment_deadline_passed.html",closed:"booking_closed.html",cancelled:"cancellation_result.html","not-found":"track_not_found.html"};
+    saveStatus(choice);
+    go(routes[choice] || "track_not_found.html");
+  });
+
+  const requestType = document.getElementById("request-type");
+  if (requestType && requestType.form) requestType.form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!requestType.form.reportValidity()) return;
+    go(requestType.value === "cancel" ? "cancellation_request.html" : "change_request_received.html");
+  });
+
+  const messageForm = document.querySelector("form[data-message-form]");
+  if (messageForm) messageForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!messageForm.reportValidity()) return;
+    messageForm.reset();
+    announce("Demo message prepared. No message was sent or stored.");
+  });
+})();
+
+
+(() => {
+  const announce = (text) => { const live = document.getElementById("live-message"); if (live) live.textContent = text; };
+  const go = (target) => { window.location.href = target; };
+  "use strict";
+  // Staff and owner demo interactions (kept in the shared application script).
+  document.querySelectorAll(".demo-form").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const message = document.getElementById("live-message");
+      const passwords = form.querySelectorAll('input[type="password"]');
+      if (form.dataset.next && passwords.length === 2 && passwords[0].value !== passwords[1].value) {
+        if (message) message.textContent = "The two passwords do not match. Please re-enter them.";
+        passwords[1].focus();
+        return;
+      }
+      if (message) message.textContent = "Demo action saved. No real account, payment, email or booking data was changed.";
+      if (form.dataset.next) setTimeout(() => go(form.dataset.next), 600);
+    });
+  });
+  document.querySelectorAll("[data-toggle-password]").forEach((toggle) => {
+    toggle.addEventListener("change", () => {
+      const password = toggle.closest("form")?.querySelector('input[type="password"], input[data-password]');
+      if (password) password.type = toggle.checked ? "text" : "password";
+    });
+  });
+  document.querySelectorAll("[data-export]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const message = document.getElementById("live-message");
+      if (message) message.textContent = `Demo ${button.dataset.export.toUpperCase()} export preview selected. Connect a backend to generate a real report.`;
+    });
+  });
+  // ---- Role handling (demo only: stored in sessionStorage, not real security) ----
+  const ROLE_KEY = "bearcatDemoRole";
+  const NOTICE_KEY = "bearcatDemoNotice";
+  const currentRole = (() => { try { return sessionStorage.getItem(ROLE_KEY) || ""; } catch (_) { return ""; } })();
+  const pageRole = document.body.dataset.role;
+  const currentFile = window.location.pathname.split("/").pop() || "index.html";
+  const loginForm = document.querySelector("[data-login-form]");
+  if (loginForm) {
+    loginForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!loginForm.reportValidity()) return;
+      const role = loginForm.querySelector("#login-role").value === "owner" ? "owner" : "staff";
+      try { sessionStorage.setItem(ROLE_KEY, role); } catch (_) {}
+      go(role === "owner" ? "owner_dashboard.html" : "staff_dashboard.html");
+    });
+  }
+  if (pageRole === "owner" && currentRole === "staff") {
+    try { sessionStorage.setItem(NOTICE_KEY, "That page is for management / owner accounts only."); } catch (_) {}
+    go("staff_dashboard.html");
+  }
+  try {
+    const notice = sessionStorage.getItem(NOTICE_KEY);
+    if (notice) { sessionStorage.removeItem(NOTICE_KEY); announce(notice); }
+  } catch (_) {}
+  if (pageRole === "staff" && currentRole === "owner") {
+    const ownerLinks = [["owner_dashboard.html", "Dashboard"], ["all_company_bookings.html", "Bookings"], ["payments_list.html", "Payments"], ["change_requests_list.html", "Change requests"], ["review_release_refunds.html", "Refunds"], ["manage_services_rates.html", "Services & rates"], ["booking_payment_reports.html", "Reports"], ["manage_staff_accounts.html", "Staff"], ["business_system_settings.html", "Settings"]];
+    const nav = document.getElementById("primary-nav");
+    if (nav) {
+      nav.setAttribute("aria-label", "Owner navigation");
+      nav.innerHTML = ownerLinks.map(([href, label]) => `<a href="${href}">${label.replace("&", "&amp;")}</a>`).join("");
+    }
+    const ownerBadge = document.querySelector(".portal-badge");
+    if (ownerBadge) { ownerBadge.textContent = "OWNER"; ownerBadge.setAttribute("href", "owner_dashboard.html"); }
+    document.querySelectorAll('a[href="staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
+  }
+  if (pageRole === "staff" || pageRole === "owner") {
+    document.querySelectorAll("#primary-nav a").forEach((link) => {
+      if (link.getAttribute("href") === currentFile) link.setAttribute("aria-current", "page");
+    });
+  }
+
+  // ---- "Edit" buttons fill the form beside the table ----
+  document.querySelectorAll("[data-edit-row]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const form = document.querySelector(link.getAttribute("href"));
+      if (!form) return;
+      event.preventDefault();
+      const cells = [...link.closest("tr").children].map((td) => td.textContent.trim());
+      const names = (form.dataset.fields || "").split(",");
+      const values = form.id === "staff-form"
+        ? { name: cells[0], email: cells[1], role: cells[2], active: cells[3] }
+        : { type: cells[1], name: cells[0], rate: cells[2], unit: cells[3], deposit: cells[4], active: cells[5] };
+      const controls = [...form.querySelectorAll("input, select, textarea")];
+      controls.forEach((control, i) => {
+        const key = names[i];
+        if (!(key in values)) return;
+        const value = values[key];
+        if (control.type === "checkbox") control.checked = /^yes/i.test(value);
+        else if (control.tagName === "SELECT") {
+          const wanted = value.toLowerCase();
+          const option = [...control.options].find((o) => o.text.toLowerCase() === wanted) || [...control.options].find((o) => wanted.startsWith(o.text.toLowerCase()));
+          if (option) control.selectedIndex = option.index;
+        } else if (control.type === "number") control.value = value.replace(/[^0-9.]/g, "");
+        else control.value = value;
+      });
+      const password = form.querySelector('input[type="password"]');
+      if (password) { password.required = false; password.placeholder = "Leave blank to keep current password"; }
+      controls[0].focus();
+      announce(`Editing ${values.name}. Change the fields and save.`);
+    });
+  });
+})();
