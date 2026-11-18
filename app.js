@@ -413,6 +413,54 @@
       }
     }
   }
+  // Auto-save & auto-restore Traveler Details cards (even when clicking Back)
+  const travelerEntryForm = document.querySelector(".traveler-entry-form");
+  if (travelerEntryForm) {
+    const syncTravelerDraft = () => {
+      const cards = [...travelerEntryForm.querySelectorAll("[data-traveler-card]")];
+      const rawTravelers = cards.map((card) => {
+        const tName = BearcatIntegrity.sanitize(card.querySelector('input[name$="[name]"]')?.value, 100);
+        const tBirth = card.querySelector('input[name$="[birthdate]"]')?.value || "";
+        const tIdType = BearcatIntegrity.sanitize(card.querySelector('select[name$="[idType]"]')?.value, 30);
+        const tIdNum = BearcatIntegrity.sanitize(card.querySelector('input[name$="[idNumber]"]')?.value, 35);
+        return {
+          full_name: tName,
+          birthdate: tBirth,
+          id_type: tIdType,
+          id_number: tIdNum,
+          id_no: tIdType ? `${tIdType.toUpperCase()}:${tIdNum}` : tIdNum
+        };
+      });
+      BearcatBookingFlow.writeDraft({ travelers: rawTravelers });
+    };
+
+    const restoreTravelerDraft = () => {
+      const savedDraft = BearcatBookingFlow.readDraft();
+      if (!Array.isArray(savedDraft.travelers) || savedDraft.travelers.length === 0) return;
+
+      const cards = [...travelerEntryForm.querySelectorAll("[data-traveler-card]")];
+      savedDraft.travelers.forEach((t, idx) => {
+        const card = cards[idx];
+        if (!card) return;
+        const nameInput = card.querySelector('input[name$="[name]"]');
+        const birthInput = card.querySelector('input[name$="[birthdate]"]');
+        const idTypeSelect = card.querySelector('select[name$="[idType]"]');
+        const idNumInput = card.querySelector('input[name$="[idNumber]"]');
+
+        if (nameInput && t.full_name) nameInput.value = t.full_name;
+        if (birthInput && t.birthdate) birthInput.value = t.birthdate;
+        if (idTypeSelect && t.id_type) {
+          idTypeSelect.value = t.id_type;
+          idTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (idNumInput && t.id_number) idNumInput.value = t.id_number;
+      });
+    };
+
+    setTimeout(restoreTravelerDraft, 0);
+    travelerEntryForm.addEventListener("input", syncTravelerDraft);
+    travelerEntryForm.addEventListener("change", syncTravelerDraft);
+  }
 
   // ARA
   const BearcatPostBooking = {
@@ -517,6 +565,8 @@
       return { ok: true };
     }
   };
+
+
 
   // Pre-fill active booking reference on post-booking forms if available
   const activeSavedRef = (() => {
