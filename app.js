@@ -361,6 +361,64 @@
     true
   );
 
+  // Populate Booking Review summary & estimated cost from saved draft
+  if (document.querySelector("[data-submit-booking]")) {
+    const draft = BearcatBookingFlow.readDraft();
+    const cust = draft.customer || {};
+    const item = draft.item || {};
+    const travelers = Array.isArray(draft.travelers) ? draft.travelers : [];
+    const service = BearcatBookingFlow.resolveService(item.service_label || "");
+
+    const paxQty = Math.max(1, Number(item.pax_qty) || travelers.length || 1);
+    const unitRate = Number(service?.base_rate) || 0;
+    const multiplier = item.trip_type === "round-trip" ? 2 : 1;
+    const subtotal = unitRate * (service?.rate_unit === "per pax" ? paxQty : 1) * multiplier;
+    const depositPct = Number(service?.deposit_percent) || 30;
+    const depositAmt = (subtotal * depositPct) / 100;
+    const fmtPHP = (n) => `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    // Replace summary rows by matching left-hand label text
+    document.querySelectorAll("div, li, tr").forEach((row) => {
+      if (row.children.length !== 2) return;
+      const label = row.children[0].textContent.trim();
+      const valEl = row.children[1];
+
+      if (label === "Customer" && cust.full_name) valEl.textContent = cust.full_name;
+      if (label === "Service" && (item.service_label || service?.service_name)) {
+        valEl.textContent = item.service_label || service.service_name;
+      }
+      if (label === "Route" && item.pickup_location && item.destination) {
+        valEl.textContent = `${item.pickup_location} → ${item.destination}`;
+      }
+      if (label === "Service estimate" && unitRate > 0) valEl.textContent = fmtPHP(unitRate);
+      if (label === "Estimated total" && subtotal > 0) valEl.textContent = fmtPHP(subtotal);
+      if (label === "Deposit requirement" && unitRate > 0) valEl.textContent = `${depositPct}%`;
+      if (label === "Estimated down payment" && depositAmt > 0) valEl.textContent = fmtPHP(depositAmt);
+    });
+
+    // Replace Traveler list placeholders
+    if (travelers.length > 0) {
+      const listHeading = [...document.querySelectorAll("h2, h3, h4, p, strong")].find(
+        (el) => el.textContent.trim() === "Traveler list"
+      );
+      const container = listHeading?.parentElement;
+      if (container) {
+        const existingItems = [...container.querySelectorAll("p, li, div")].filter(
+          (el) => el !== listHeading && /^Traveler\s+\d+/i.test(el.textContent.trim())
+        );
+        if (existingItems.length > 0) {
+          const template = existingItems[0].cloneNode(true);
+          existingItems.forEach((el) => el.remove());
+          travelers.forEach((t, i) => {
+            const line = template.cloneNode(true);
+            line.textContent = `Traveler ${i + 1} · ${t.full_name} · ${t.birthdate} · ${t.id_no}`;
+            container.appendChild(line);
+          });
+        }
+      }
+    }
+  }
+
   // Capture-phase final commit on Booking Review page
   document.addEventListener(
     "click",
