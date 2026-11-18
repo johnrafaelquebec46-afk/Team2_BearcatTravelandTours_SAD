@@ -482,6 +482,74 @@ const restoreTravelerDraft = () => {
     travelerEntryForm.addEventListener("change", syncTravelerDraft);
   }
 
+  // Auto-save & auto-restore Accompanying Guardian modal details
+  const guardianModal = document.getElementById("guardian-confirmation");
+  if (guardianModal) {
+    const syncGuardianDraft = () => {
+      const adultSelect = document.getElementById("guardian-adult-traveler");
+      const relInputs = [...guardianModal.querySelectorAll('input[type="text"], textarea')];
+      const fileInputs = [...guardianModal.querySelectorAll('input[type="file"]')];
+
+      BearcatBookingFlow.writeDraft({
+        guardian: {
+          adultValue: adultSelect?.value || "",
+          adultText: adultSelect?.options?.[adultSelect.selectedIndex]?.text || "",
+          relationships: relInputs.map((inp) => BearcatIntegrity.sanitize(inp.value, 150)),
+          proofNames: fileInputs.map((inp) => inp.files?.[0]?.name || "")
+        }
+      });
+    };
+
+    const restoreGuardianDraft = () => {
+      const saved = BearcatBookingFlow.readDraft().guardian;
+      if (!saved) return;
+
+      const adultSelect = document.getElementById("guardian-adult-traveler");
+      if (adultSelect && (saved.adultValue || saved.adultText)) {
+        const match = [...adultSelect.options].find(
+          (o) => (saved.adultValue && o.value === saved.adultValue) || (saved.adultText && o.text === saved.adultText)
+        );
+        if (match) {
+          adultSelect.value = match.value;
+          adultSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+
+      const relInputs = [...guardianModal.querySelectorAll('input[type="text"], textarea')];
+      if (Array.isArray(saved.relationships)) {
+        relInputs.forEach((inp, i) => {
+          if (saved.relationships[i]) inp.value = saved.relationships[i];
+        });
+      }
+
+      const fileInputs = [...guardianModal.querySelectorAll('input[type="file"]')];
+      if (Array.isArray(saved.proofNames)) {
+        fileInputs.forEach((inp, i) => {
+          const prevName = saved.proofNames[i];
+          if (!prevName) return;
+          let note = inp.parentElement?.querySelector(".btt-saved-proof-note");
+          if (!note) {
+            note = document.createElement("small");
+            note.className = "btt-saved-proof-note";
+            note.style.display = "block";
+            note.style.marginTop = "4px";
+            note.style.color = "#4b3869";
+            inp.insertAdjacentElement("afterend", note);
+          }
+          note.textContent = `Previously selected file: ${prevName} (re-select file to confirm upload)`;
+        });
+      }
+    };
+
+    guardianModal.addEventListener("input", syncGuardianDraft);
+    guardianModal.addEventListener("change", syncGuardianDraft);
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("[data-next], [data-confirm-guardian], button[type='submit']")) {
+        setTimeout(restoreGuardianDraft, 60);
+      }
+    });
+  }
+
   // ARA
   const BearcatPostBooking = {
     verifyBookingOwnership(ref, email = null) {
