@@ -15,9 +15,6 @@
   const announce = (text) => { const live = document.getElementById("live-message"); if (live) live.textContent = text; };
   const go = (target) => { window.location.href = target; };
   //ARA
-  // =========================================================================
-  // PHASE 1: CLIENT-SIDE DATA INTEGRITY & SQL-ALIGNED STORAGE LAYER
-  // =========================================================================
   const DB_KEYS = {
     CUSTOMERS: "btt_db_customers",
     SERVICES: "btt_db_services",
@@ -108,6 +105,286 @@
 
   BearcatStore.seedServices();
   window.BearcatClientAPI = { DB_KEYS, BearcatIntegrity, BearcatStore };
+  //ARA
+  const DRAFT_KEY = "btt_booking_draft_payload";
+
+  const BearcatBookingFlow = {
+    readDraft() {
+      try {
+        return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null") || {};
+      } catch (_) {
+        return {};
+      }
+    },
+    writeDraft(patch) {
+      const current = this.readDraft();
+      const updated = { ...current, ...patch, updated_at: new Date().toISOString() };
+      try {
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    },
+    resolveService(serviceLabelOrId) {
+      const services = BearcatStore.readTable(DB_KEYS.SERVICES);
+      const query = BearcatIntegrity.sanitize(serviceLabelOrId, 100).toLowerCase();
+      return (
+        services.find(
+          (s) =>
+            String(s.service_id) === query ||
+            s.service_name.toLowerCase().includes(query) ||
+            s.service_type.toLowerCase().includes(query)
+        ) || services[0]
+      );
+    },
+    commitBookingToDatabase() {
+      const draft = this.readDraft();
+      const customerData = draft.customer || {};
+      const itemData = draft.item || {};
+      const travelersData = Array.isArray(draft.travelers) ? draft.travelers : [];
+
+      if (!customerData.full_name || !customerData.email || !itemData.service_date || travelersData.length === 0) {
+        return { ok: false, message: "Incomplete booking data. Please review your booking and traveler details." };
+      }
+
+      const now = new Date().toISOString();
+      const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      // 1. Upsert CUSTOMER (enforce unique email constraint)
+      const customers = BearcatStore.readTable(DB_KEYS.CUSTOMERS);
+      let customer = customers.find((c) => c.email.toLowerCase() === customerData.email.toLowerCase());
+      if (customer) {
+        customer.full_name = customerData.full_name;
+        customer.contact_no = customerData.contact_no;
+      } else {
+        const nextCustId = customers.reduce((max, c) => Math.max(max, Number(c.customer_id) || 0), 0) + 1;
+        customer = {
+          customer_id: nextCustId,
+          full_name: customerData.full_name,
+          email: customerData.email,
+          contact_no: customerData.contact_no,
+          created_at: now
+        };
+        customers.push(customer);
+      }
+      BearcatStore.writeTable(DB_KEYS.CUSTOMERS, customers);
+
+      // 2. Create BOOKING record (aligned with booking table)
+      const bookings = BearcatStore.readTable(DB_KEYS.BOOKINGS);
+      const nextBookingId = bookings.reduce((max, b) => Math.max(max, Number(b.booking_id) || 0), 0) + 1;
+      let bookingRef = BearcatIntegrity.generateBookingRef();
+      while (bookings.some((b) => b.booking_ref === bookingRef)) {
+        bookingRef = BearcatIntegrity.generateBookingRef();
+      }
+
+      const service = this.resolveService(itemData.service_label);
+      const paxQty = Math.max(1, Number(itemData.pax_qty) || travelersData.length);
+      const unitRate = Number(service.base_rate) || 0;
+      const multiplier = itemData.trip_type === "round-trip" ? 2 : 1;
+      const subtotal = Number((unitRate * (service.rate_unit === "per pax" ? paxQty : 1) * multiplier).toFixed(2));
+      const depositAmount = Number(((subtotal * (Number(service.deposit_percent) || 30)) / 100).toFixed(2));
+
+      const bookingRecord = {
+        booking_id: nextBookingId,
+        booking_ref: bookingRef,
+        customer_id: customer.customer_id,
+        handled_by: null,
+        status: "pending",
+        total_amount: subtotal,
+        deposit_amount: depositAmount,
+        payment_due_by: dueDate,
+        remarks: `${itemData.trip_type || "one-way"} | Dep: ${itemData.departure_schedule || "TBA"}${itemData.return_date ? ` | Ret: ${itemData.return_date} ${itemData.return_schedule || ""}` : ""}`,
+        created_at: now,
+        approved_at: null,
+        updated_at: now
+      };
+      bookings.push(bookingRecord);
+      BearcatStore.writeTable(DB_KEYS.BOOKINGS, bookings);
+
+      // 3. Create BOOKING_ITEM record
+      const items = BearcatStore.readTable(DB_KEYS.BOOKING_ITEMS);
+      const nextItemId = items.reduce((max, it) => Math.max(max, Number(it.item_id) || 0), 0) + 1;
+      items.push({
+        item_id: nextItemId,
+        booking_id: nextBookingId,
+        service_id: service.service_id,
+        service_date: itemData.service_date,
+        pax_qty: paxQty,
+        pickup_location: itemData.pickup_location,
+        destination: itemData.destination,
+        unit_rate: unitRate,
+        subtotal: subtotal
+      });
+      BearcatStore.writeTable(DB_KEYS.BOOKING_ITEMS, items);
+
+      // 4. Create TRAVELER records
+      const travelers = BearcatStore.readTable(DB_KEYS.TRAVELERS);
+      let nextTravelerId = travelers.reduce((max, t) => Math.max(max, Number(t.traveler_id) || 0), 0) + 1;
+      travelersData.forEach((t) => {
+        travelers.push({
+          traveler_id: nextTravelerId++,
+          booking_id: nextBookingId,
+          full_name: t.full_name,
+          birthdate: t.birthdate,
+          id_no: t.id_no
+        });
+      });
+      BearcatStore.writeTable(DB_KEYS.TRAVELERS, travelers);
+
+      try {
+        sessionStorage.setItem(REF_KEY, bookingRef);
+        sessionStorage.removeItem(DRAFT_KEY);
+      } catch (_) {}
+
+      return { ok: true, booking: bookingRecord };
+    }
+  };
+
+  // Capture-phase validation & draft capture for Booking Details & Traveler Details
+  document.addEventListener(
+    "submit",
+    (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+
+      // A. Booking Details Form Integrity & Draft Capture
+      if (form.id === "booking-details-form" || form.dataset.pageForm === "booking-details") {
+        const nameInput = document.getElementById("customer-name");
+        const emailInput = document.getElementById("customer-email");
+        const phoneInput = document.getElementById("customer-phone");
+        const serviceInput = document.getElementById("trip-service");
+        const pickupInput = document.getElementById("pickup");
+        const destInput = document.getElementById("destination");
+        const paxInput = document.getElementById("pax");
+        const depDateInput = document.getElementById("trip-date");
+        const retDateInput = document.getElementById("return-date");
+        const depSchedInput = document.getElementById("departure-schedule");
+        const retSchedInput = document.getElementById("return-schedule");
+        const tripType = form.querySelector('input[name="tripType"]:checked')?.value || "one-way";
+
+        const fullName = BearcatIntegrity.sanitize(nameInput?.value, 100);
+        const email = BearcatIntegrity.sanitize(emailInput?.value, 100);
+        const contactNo = BearcatIntegrity.sanitize(phoneInput?.value, 20);
+        const pickup = BearcatIntegrity.sanitize(pickupInput?.value, 255);
+        const destination = BearcatIntegrity.sanitize(destInput?.value, 255);
+        const paxQty = Math.floor(Number(paxInput?.value || 0));
+
+        if (fullName.length < 2) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          announce("Enter a valid customer full name (at least 2 characters).");
+          nameInput?.focus();
+          return;
+        }
+        if (!BearcatIntegrity.isValidEmail(email)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          announce("Enter a valid email address (e.g., name@email.com).");
+          emailInput?.focus();
+          return;
+        }
+        if (!BearcatIntegrity.isValidPHContact(contactNo)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          announce("Enter a valid Philippine mobile number (e.g., 09171234567 or +639171234567).");
+          phoneInput?.focus();
+          return;
+        }
+        if (!Number.isInteger(paxQty) || paxQty <= 0) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          announce("Number of travelers (pax) must be at least 1.");
+          paxInput?.focus();
+          return;
+        }
+        if (!pickup || !destination) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          announce("Both pickup location and destination are required.");
+          (!pickup ? pickupInput : destInput)?.focus();
+          return;
+        }
+
+        const serviceLabel = serviceInput?.options?.[serviceInput.selectedIndex]?.text || serviceInput?.value || "Tour Package";
+        BearcatBookingFlow.writeDraft({
+          customer: { full_name: fullName, email, contact_no: contactNo },
+          item: {
+            service_label: BearcatIntegrity.sanitize(serviceLabel, 100),
+            trip_type: tripType,
+            service_date: depDateInput?.value || "",
+            departure_schedule: depSchedInput?.value || "",
+            return_date: tripType === "round-trip" ? retDateInput?.value || "" : "",
+            return_schedule: tripType === "round-trip" ? retSchedInput?.value || "" : "",
+            pax_qty: paxQty,
+            pickup_location: pickup,
+            destination: destination
+          }
+        });
+      }
+
+      // B. Traveler Entry Form Integrity & Draft Capture
+      if (form.classList.contains("traveler-entry-form")) {
+        const cards = [...form.querySelectorAll("[data-traveler-card]")];
+        const draft = BearcatBookingFlow.readDraft();
+        const expectedPax = Number(draft.item?.pax_qty || sessionStorage.getItem(PAX_KEY) || cards.length);
+
+        if (cards.length !== expectedPax) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          announce(`Traveler count mismatch: expected ${expectedPax} traveler(s) based on your booking details.`);
+          return;
+        }
+
+        const travelerRows = [];
+        for (const card of cards) {
+          const tName = BearcatIntegrity.sanitize(card.querySelector('input[name$="[name]"]')?.value, 100);
+          const tBirth = card.querySelector('input[name$="[birthdate]"]')?.value || "";
+          const tIdType = BearcatIntegrity.sanitize(card.querySelector('select[name$="[idType]"]')?.value, 30);
+          const tIdNum = BearcatIntegrity.sanitize(card.querySelector('input[name$="[idNumber]"]')?.value, 35);
+
+          if (tName.length < 2 || !tBirth || tBirth > localToday() || !BearcatIntegrity.isValidIdNumber(tIdNum)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            announce("Ensure every traveler has a valid full name, past/current birthdate, and valid ID number.");
+            return;
+          }
+
+          travelerRows.push({
+            full_name: tName,
+            birthdate: tBirth,
+            id_no: tIdType ? `${tIdType.toUpperCase()}:${tIdNum}` : tIdNum
+          });
+        }
+
+        BearcatBookingFlow.writeDraft({ travelers: travelerRows });
+      }
+    },
+    true
+  );
+
+  // Capture-phase final commit on Booking Review page
+  document.addEventListener(
+    "click",
+    (event) => {
+      const submitBtn = event.target.closest("[data-submit-booking]");
+      if (!submitBtn) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const result = BearcatBookingFlow.commitBookingToDatabase();
+      if (!result.ok) {
+        announce(result.message);
+        window.alert(result.message);
+        return;
+      }
+
+      saveStatus("pending");
+      go("booking_success.html");
+    },
+    true
+  );
+
+  window.BearcatClientAPI.BearcatBookingFlow = BearcatBookingFlow;
 
   document.querySelectorAll(".booking-reference, #booking-reference").forEach((node) => { node.textContent = readRef(); });
 
