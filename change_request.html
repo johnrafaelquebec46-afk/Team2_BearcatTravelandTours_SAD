@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FDF3F3">
+<meta name="description" content="Bearcat Travel & Tours customer booking demo — Request a booking change.">
+<title>Request a booking change | Bearcat Travel &amp; Tours</title>
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body data-page="change-request">
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="site-header">
+  <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
+  <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+  <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a href="services.html">Services</a><a href="booking_details.html">Booking request</a><a href="track_booking.html">Track booking</a></nav>
+  <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
+</header>
+<main id="main" class="page-shell">
+  <header class="page-heading"><p class="eyebrow">CUSTOMER · BOOKING SUPPORT</p><h1>Request a booking change</h1><p>Ask staff to review a change or cancellation request.</p></header>
+  <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
+  <div class="review-grid"><form class="surface form-card" id="change-form"><h2>Request details</h2><label for="change-ref">Booking reference</label><input id="change-ref" placeholder="BTT-XXXXXX" required><label for="request-type">Request type</label><select id="request-type" required><option value="">Change / cancellation</option><option value="change">Change date, schedule, package, or route</option><option value="cancel">Cancellation</option></select><label for="change-text">What would you like changed?</label><textarea id="change-text" placeholder="Describe your request" rows="3" required></textarea><label for="preferred">Preferred date, service, or route</label><input id="preferred" placeholder="Enter updated trip details"><button class="button button-primary" type="submit">Submit request</button></form><section class="surface content-card lavender-panel"><h2>Request decision</h2><dl class="summary-list"><div><dt>Request status</dt><dd>Awaiting decision</dd></div><div><dt>Possible change fee</dt><dd>5%–10%</dd></div><div><dt>Price difference</dt><dd>₱—</dd></div><div><dt>Staff remarks</dt><dd>Shown after review</dd></div></dl><p>An approved change updates the booking record. Cancellation terms are provided with the decision.</p></section></div>
+</main>
+
+</body></html>
