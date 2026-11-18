@@ -1,3 +1,112 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Bearcat Travel & Tours staff dashboard demo."><title>Staff dashboard | Bearcat Travel &amp; Tours</title><link rel="stylesheet" href="styles.css"><script src="app.js" defer></script></head>
-<body data-page="staff-dashboard" data-role="staff"><a class="skip-link" href="#main">Skip to main content</a><header class="site-header"><a class="brand" href="staff_dashboard.html" aria-label="Bearcat Travel and Tours"><span class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button><nav class="primary-nav" id="primary-nav" aria-label="Staff navigation"><a href="staff_dashboard.html">Dashboard</a><a href="bookings_list.html">Bookings</a><a href="payments_list.html">Payments</a><a href="change_requests_list.html">Change requests</a><a href="refunds_register.html">Refunds</a><a href="my_recent_activity.html">Activity</a></nav><a class="portal-badge" href="my_account.html">COMPANY PERSONNEL</a></header><main id="main" class="page-shell"><header class="page-heading"><p class="eyebrow">COMPANY PERSONNEL · PERSONAL DASHBOARD</p><h1>Staff dashboard</h1><p>Welcome back, Staff name.</p></header><div class="live-message" id="live-message" aria-live="polite" aria-atomic="true"></div><div class="stats-grid"><a class="surface stat-card" href="bookings_list.html"><span class="stat-value">08</span><span class="muted">Pending bookings</span></a><a class="surface stat-card" href="payments_list.html"><span class="stat-value">03</span><span class="muted">Payments to verify</span></a><a class="surface stat-card" href="change_requests_list.html"><span class="stat-value">04</span><span class="muted">Change / cancel requests</span></a></div><div class="card-grid three"><section class="surface content-card"><h2>Review bookings</h2><p>Check new requests and service availability.</p><a class="button button-primary" href="bookings_list.html">Review bookings</a></section><section class="surface content-card"><h2>Verify payments</h2><p>Review submitted proofs and confirm valid payments.</p><a class="button button-primary" href="payments_list.html">Verify payments</a></section><section class="surface content-card"><h2>Review requests</h2><p>Handle customer change and cancellation requests.</p><a class="button button-primary" href="change_requests_list.html">Review requests</a></section></div><section class="surface content-card"><h2>Needs action</h2><div class="table-wrap"><table><thead><tr><th scope="col">Reference</th><th scope="col">Customer · Service</th><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead><tbody><tr><td>BTT-000124</td><td>Jamie Cruz · Travel package</td><td>Nov 20, 2026</td><td><span class="status-pill status-pending">Pending</span></td><td><a class="button button-soft" href="review_booking.html">Review</a></td></tr><tr><td>BTT-000121</td><td>Alex Reyes · Tour service</td><td>Nov 22, 2026</td><td>Submitted payment</td><td><a class="button button-soft" href="verify_payment.html">Verify</a></td></tr><tr><td>BTT-000118</td><td>Mika Santos · Custom trip</td><td>Nov 25, 2026</td><td>Change request</td><td><a class="button button-soft" href="review_change_request.html">Review</a></td></tr><tr><td>BTT-000110</td><td>Taylor Lim · Travel package</td><td>Nov 28, 2026</td><td>Confirmed</td><td><a class="button button-soft" href="change_confirmed_booking.html">View</a></td></tr></tbody></table></div></section><section class="surface content-card"><h2>My account</h2><p><strong>Staff name</strong> · Company personnel</p><p class="muted">Handled today: 6</p><a class="button button-soft" href="my_account.html">My account</a> <a class="button button-soft" href="staff_login.html">Log out</a></section></main><footer class="site-footer"><p>© 2026 Bearcat Travel &amp; Tours · Staff portal · Demo interface</p></footer></body></html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Bearcat Travel & Tours staff dashboard demo.">
+    <title>Staff dashboard | Bearcat Travel &amp; Tours</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+</head>
+
+<body data-page="staff-dashboard" data-role="staff"><a class="skip-link" href="#main">Skip to main content</a>
+    <header class="site-header"><a class="brand" href="staff_dashboard.html" aria-label="Bearcat Travel and Tours"><span
+                class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp;
+                    TOURS</small></span></a><button class="menu-toggle" type="button" aria-expanded="false"
+            aria-controls="primary-nav">Menu</button>
+        <nav class="primary-nav" id="primary-nav" aria-label="Staff navigation"><a
+                href="staff_dashboard.html">Dashboard</a><a href="bookings_list.html">Bookings</a><a
+                href="payments_list.html">Payments</a><a href="change_requests_list.html">Change requests</a><a
+                href="refunds_register.html">Refunds</a><a href="my_recent_activity.html">Activity</a></nav><a
+            class="portal-badge" href="my_account.html">COMPANY PERSONNEL</a>
+    </header>
+    <main id="main" class="page-shell">
+        <header class="page-heading">
+            <p class="eyebrow">COMPANY PERSONNEL · PERSONAL DASHBOARD</p>
+            <h1>Staff dashboard</h1>
+            <p>Welcome back, Staff name.</p>
+        </header>
+        <div class="live-message" id="live-message" aria-live="polite" aria-atomic="true"></div>
+        <div class="stats-grid"><a class="surface stat-card" href="bookings_list.html"><span
+                    class="stat-value">08</span><span class="muted">Pending bookings</span></a><a
+                class="surface stat-card" href="payments_list.html"><span class="stat-value">03</span><span
+                    class="muted">Payments to verify</span></a><a class="surface stat-card"
+                href="change_requests_list.html"><span class="stat-value">04</span><span class="muted">Change / cancel
+                    requests</span></a></div>
+        <div class="card-grid three">
+            <section class="surface content-card">
+                <h2>Review bookings</h2>
+                <p>Check new requests and service availability.</p><a class="button button-primary"
+                    href="bookings_list.html">Review bookings</a>
+            </section>
+            <section class="surface content-card">
+                <h2>Verify payments</h2>
+                <p>Review submitted proofs and confirm valid payments.</p><a class="button button-primary"
+                    href="payments_list.html">Verify payments</a>
+            </section>
+            <section class="surface content-card">
+                <h2>Review requests</h2>
+                <p>Handle customer change and cancellation requests.</p><a class="button button-primary"
+                    href="change_requests_list.html">Review requests</a>
+            </section>
+        </div>
+        <section class="surface content-card">
+            <h2>Needs action</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Reference</th>
+                            <th scope="col">Customer · Service</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>BTT-000124</td>
+                            <td>Jamie Cruz · Travel package</td>
+                            <td>Nov 20, 2026</td>
+                            <td><span class="status-pill status-pending">Pending</span></td>
+                            <td><a class="button button-soft" href="review_booking.html">Review</a></td>
+                        </tr>
+                        <tr>
+                            <td>BTT-000121</td>
+                            <td>Alex Reyes · Tour service</td>
+                            <td>Nov 22, 2026</td>
+                            <td>Submitted payment</td>
+                            <td><a class="button button-soft" href="verify_payment.html">Verify</a></td>
+                        </tr>
+                        <tr>
+                            <td>BTT-000118</td>
+                            <td>Mika Santos · Custom trip</td>
+                            <td>Nov 25, 2026</td>
+                            <td>Change request</td>
+                            <td><a class="button button-soft" href="review_change_request.html">Review</a></td>
+                        </tr>
+                        <tr>
+                            <td>BTT-000110</td>
+                            <td>Taylor Lim · Travel package</td>
+                            <td>Nov 28, 2026</td>
+                            <td>Confirmed</td>
+                            <td><a class="button button-soft" href="change_confirmed_booking.html">View</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <section class="surface content-card">
+            <h2>My account</h2>
+            <p><strong>Staff name</strong> · Company personnel</p>
+            <p class="muted">Handled today: 6</p><a class="button button-soft" href="my_account.html">My account</a> <a
+                class="button button-soft" href="staff_login.html">Log out</a>
+        </section>
+    </main>
+    <footer class="site-footer">
+        <p>© 2026 Bearcat Travel &amp; Tours · Staff portal · Demo interface</p>
+    </footer>
+</body>
+
+</html>
