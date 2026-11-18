@@ -527,16 +527,19 @@ const restoreTravelerDraft = () => {
         fileInputs.forEach((inp, i) => {
           const prevName = saved.proofNames[i];
           if (!prevName) return;
+          inp.required = false;
+          inp.dataset.hasSavedProof = "true";
           let note = inp.parentElement?.querySelector(".btt-saved-proof-note");
           if (!note) {
             note = document.createElement("small");
             note.className = "btt-saved-proof-note";
             note.style.display = "block";
-            note.style.marginTop = "4px";
-            note.style.color = "#4b3869";
+            note.style.marginTop = "6px";
+            note.style.fontWeight = "600";
+            note.style.color = "#2e6f40";
             inp.insertAdjacentElement("afterend", note);
           }
-          note.textContent = `Previously selected file: ${prevName} (re-select file to confirm upload)`;
+          note.textContent = `✓ Saved file: ${prevName} (no need to re-upload unless changing file)`;
         });
       }
     };
