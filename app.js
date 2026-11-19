@@ -11,7 +11,7 @@
   const RETURN_SCHEDULE_KEY = "bearcatCustomerDemoReturnSchedule";
   const MINOR_TRAVELER_KEY = "bearcatCustomerDemoMinorTraveler";
   const readRef = () => { try { return sessionStorage.getItem(REF_KEY) || "BTT-DEMO01"; } catch (_) { return "BTT-DEMO01"; } };
-  const saveStatus = (value) => { try { sessionStorage.setItem(STATUS_KEY, String(value).toLowerCase()); } catch (_) {} };
+  const saveStatus = (value) => { try { sessionStorage.setItem(STATUS_KEY, String(value).toLowerCase()); } catch (_) { } };
   const announce = (text) => { const live = document.getElementById("live-message"); if (live) live.textContent = text; };
   const go = (target) => { window.location.href = target; };
   //ARA
@@ -121,7 +121,7 @@
       const updated = { ...current, ...patch, updated_at: new Date().toISOString() };
       try {
         sessionStorage.setItem(DRAFT_KEY, JSON.stringify(updated));
-      } catch (_) {}
+      } catch (_) { }
       return updated;
     },
     resolveService(serviceLabelOrId) {
@@ -233,7 +233,7 @@
       try {
         sessionStorage.setItem(REF_KEY, bookingRef);
         sessionStorage.removeItem(DRAFT_KEY);
-      } catch (_) {}
+      } catch (_) { }
 
       return { ok: true, booking: bookingRecord };
     }
@@ -492,7 +492,7 @@
       BearcatBookingFlow.writeDraft({ travelers: rawTravelers });
     };
 
-const restoreTravelerDraft = () => {
+    const restoreTravelerDraft = () => {
       const savedDraft = BearcatBookingFlow.readDraft();
       if (!Array.isArray(savedDraft.travelers) || savedDraft.travelers.length === 0) return;
 
@@ -673,7 +673,7 @@ const restoreTravelerDraft = () => {
 
       try {
         sessionStorage.setItem(REF_KEY, lookup.booking.booking_ref);
-      } catch (_) {}
+      } catch (_) { }
       saveStatus("payment_submitted");
 
       return { ok: true };
@@ -709,7 +709,7 @@ const restoreTravelerDraft = () => {
 
       try {
         sessionStorage.setItem(REF_KEY, lookup.booking.booking_ref);
-      } catch (_) {}
+      } catch (_) { }
 
       return { ok: true };
     }
@@ -779,7 +779,7 @@ const restoreTravelerDraft = () => {
 
           try {
             sessionStorage.setItem(REF_KEY, realBooking.booking_ref);
-          } catch (_) {}
+          } catch (_) { }
           saveStatus(statusKey);
           go(routes[statusKey] || "booking_pending.html");
           return;
@@ -935,28 +935,28 @@ const restoreTravelerDraft = () => {
       const savedDeparture = sessionStorage.getItem(TRIP_DATE_KEY) || "";
       tripDateField.value = savedDeparture >= localToday() ? savedDeparture : "";
       if (savedDeparture && savedDeparture < localToday()) sessionStorage.removeItem(TRIP_DATE_KEY);
-    } catch (_) {}
+    } catch (_) { }
   }
   if (returnDateField) {
     try {
       const savedReturn = sessionStorage.getItem(RETURN_DATE_KEY) || "";
       returnDateField.value = savedReturn >= localToday() ? savedReturn : "";
       if (savedReturn && savedReturn < localToday()) sessionStorage.removeItem(RETURN_DATE_KEY);
-    } catch (_) {}
+    } catch (_) { }
   }
   if (tripTypeRadios.length) {
     try {
       const savedType = sessionStorage.getItem(TRIP_TYPE_KEY);
       const radio = tripTypeRadios.find((item) => item.value === savedType);
       if (radio) radio.checked = true;
-    } catch (_) {}
+    } catch (_) { }
     tripTypeRadios.forEach((radio) => radio.addEventListener("change", updateTripType));
     updateTripType();
   }
   try {
     if (departureScheduleField) departureScheduleField.value = sessionStorage.getItem(DEPARTURE_SCHEDULE_KEY) || "";
     if (returnScheduleField) returnScheduleField.value = sessionStorage.getItem(RETURN_SCHEDULE_KEY) || "";
-  } catch (_) {}
+  } catch (_) { }
   if (tripDateField && returnDateField) {
     returnDateField.min = tripDateField.value || localToday();
     tripDateField.addEventListener("change", () => {
@@ -975,13 +975,13 @@ const restoreTravelerDraft = () => {
       const savedChoice = sessionStorage.getItem(MINOR_TRAVELER_KEY);
       const savedRadio = minorTravelerRadios.find((radio) => radio.value === savedChoice);
       if (savedRadio) savedRadio.checked = true;
-    } catch (_) {}
+    } catch (_) { }
     minorTravelerRadios.forEach((radio) => radio.addEventListener("change", updateMinorTravelerHint));
     updateMinorTravelerHint();
   }
   const reviewTripType = document.getElementById("review-trip-type");
   if (reviewTripType) {
-    const formatTripDate = (value) => value ? new Intl.DateTimeFormat("en", {month:"short", day:"numeric", year:"numeric"}).format(new Date(`${value}T12:00:00`)) : "—";
+    const formatTripDate = (value) => value ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)) : "—";
     let savedType = "", savedDeparture = "", savedReturn = "", savedDepartureTime = "", savedReturnTime = "";
     try {
       savedType = sessionStorage.getItem(TRIP_TYPE_KEY) || "";
@@ -989,7 +989,7 @@ const restoreTravelerDraft = () => {
       savedReturn = sessionStorage.getItem(RETURN_DATE_KEY) || "";
       savedDepartureTime = sessionStorage.getItem(DEPARTURE_SCHEDULE_KEY) || "";
       savedReturnTime = sessionStorage.getItem(RETURN_SCHEDULE_KEY) || "";
-    } catch (_) {}
+    } catch (_) { }
     reviewTripType.textContent = savedType === "one-way" ? "One way" : savedType === "round-trip" ? "Round trip" : "—";
     const departureDate = document.getElementById("review-departure-date");
     const departureTime = document.getElementById("review-departure-schedule");
@@ -1012,7 +1012,7 @@ const restoreTravelerDraft = () => {
     const summaryList = document.querySelector("[data-traveler-summary-list]");
     if (summaryList) {
       const count = Math.max(1, Number(savedTravelerCount));
-      summaryList.replaceChildren(...Array.from({length: count}, (_, i) => {
+      summaryList.replaceChildren(...Array.from({ length: count }, (_, i) => {
         const item = document.createElement("p");
         item.textContent = `Traveler ${i + 1} · Name · birthdate · ID`;
         return item;
@@ -1034,7 +1034,7 @@ const restoreTravelerDraft = () => {
     const submitBooking = event.target.closest("[data-submit-booking]");
     if (submitBooking) {
       const newRef = "BTT-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-      try { sessionStorage.setItem(REF_KEY, newRef); } catch (_) {}
+      try { sessionStorage.setItem(REF_KEY, newRef); } catch (_) { }
       saveStatus("pending");
       go("booking_success.html");
     }
@@ -1069,7 +1069,7 @@ const restoreTravelerDraft = () => {
         announce("Choose a current or future available travel date before continuing.");
         return;
       }
-      try { sessionStorage.setItem(TRIP_DATE_KEY, selectedDate.value); } catch (_) {}
+      try { sessionStorage.setItem(TRIP_DATE_KEY, selectedDate.value); } catch (_) { }
     }
     if (form.id === "booking-details-form" || form.dataset.pageForm === "booking-details") {
       const tripType = form.querySelector('input[name="tripType"]:checked')?.value;
@@ -1091,22 +1091,22 @@ const restoreTravelerDraft = () => {
           sessionStorage.removeItem(RETURN_DATE_KEY);
           sessionStorage.removeItem(RETURN_SCHEDULE_KEY);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     const paxField = form.querySelector("#pax, #error-pax");
     const minorChoice = form.querySelector('input[name="minorTraveler"]:checked');
     if (minorChoice) {
-      try { sessionStorage.setItem(MINOR_TRAVELER_KEY, minorChoice.value); } catch (_) {}
+      try { sessionStorage.setItem(MINOR_TRAVELER_KEY, minorChoice.value); } catch (_) { }
     }
     if (paxField) {
       try {
         sessionStorage.setItem(PAX_KEY, String(Math.max(1, Math.floor(Number(paxField.value)))));
         sessionStorage.removeItem(TRAVELER_COUNT_KEY);
-      } catch (_) {}
+      } catch (_) { }
     }
     if (form.classList.contains("traveler-entry-form")) {
       const count = form.querySelectorAll("[data-traveler-card]").length;
-      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(count)); } catch (_) {}
+      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(count)); } catch (_) { }
     }
     go(form.dataset.next);
   }));
@@ -1205,9 +1205,9 @@ const restoreTravelerDraft = () => {
     };
 
     const renderTravelers = (count) => {
-      list.innerHTML = Array.from({length: count}, (_, i) => cardMarkup(i + 1)).join("");
+      list.innerHTML = Array.from({ length: count }, (_, i) => cardMarkup(i + 1)).join("");
       list.querySelectorAll("[data-traveler-card]").forEach(configureIdField);
-      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(count)); } catch (_) {}
+      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(count)); } catch (_) { }
     };
 
     const initialCount = Number.isInteger(savedCount) && savedCount >= 1 ? savedCount : paxLimit;
@@ -1234,7 +1234,7 @@ const restoreTravelerDraft = () => {
         birthdate: card.querySelector('[name$="[birthdate]"]').value,
         age: ageFromBirthdate(card.querySelector('[name$="[birthdate]"]').value)
       }));
-      return {minors: travelers.filter((traveler) => traveler.age !== null && traveler.age < 18), adults: travelers.filter((traveler) => traveler.age !== null && traveler.age >= 18)};
+      return { minors: travelers.filter((traveler) => traveler.age !== null && traveler.age < 18), adults: travelers.filter((traveler) => traveler.age !== null && traveler.age >= 18) };
     };
     const guardianControls = () => guardianOverlay ? [...guardianOverlay.querySelectorAll("[data-guardian-control]")] : [];
     const addGuardianField = (minor) => {
@@ -1285,8 +1285,8 @@ const restoreTravelerDraft = () => {
     };
     const prepareGuardianDialog = (minors, adults) => {
       const signature = JSON.stringify({
-        minors: minors.map(({index,name,birthdate}) => ({index,name,birthdate})),
-        adults: adults.map(({index,name,birthdate}) => ({index,name,birthdate}))
+        minors: minors.map(({ index, name, birthdate }) => ({ index, name, birthdate })),
+        adults: adults.map(({ index, name, birthdate }) => ({ index, name, birthdate }))
       });
       if (signature !== guardianSignature) {
         guardianAdultSelect.replaceChildren(new Option("Select an adult traveler", ""));
@@ -1323,7 +1323,7 @@ const restoreTravelerDraft = () => {
       guardianReturnFocus?.focus();
     };
     validateTravelerEligibility = () => {
-      const {minors, adults} = travelerAgeGroups();
+      const { minors, adults } = travelerAgeGroups();
       if (minors.length === 0) {
         travelerForm.removeAttribute("data-request-state");
         guardianConfirmed = false;
@@ -1356,7 +1356,7 @@ const restoreTravelerDraft = () => {
       list.insertAdjacentHTML("beforeend", cardMarkup(nextIndex));
       configureIdField(list.querySelector(`[data-traveler-card="${nextIndex}"]`));
       guardianConfirmed = false;
-      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(nextIndex)); } catch (_) {}
+      try { sessionStorage.setItem(TRAVELER_COUNT_KEY, String(nextIndex)); } catch (_) { }
     };
     const openConfirm = () => {
       if (!overlay || !dialog) { announce("The traveler confirmation screen could not be opened."); return; }
@@ -1418,7 +1418,7 @@ const restoreTravelerDraft = () => {
   const formatCalendarDate = (iso) => {
     if (!iso) return "Choose a date";
     const date = new Date(`${iso}T12:00:00`);
-    return new Intl.DateTimeFormat("en", {month:"short", day:"numeric", year:"numeric"}).format(date);
+    return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date);
   };
   const renderCalendar = (monthValue, initialSelected = "") => {
     if (!calendar || !monthValue || !/^\d{4}-\d{2}$/.test(monthValue)) return;
@@ -1435,7 +1435,7 @@ const restoreTravelerDraft = () => {
       calendar.append(blank);
     }
     for (let number = 1; number <= daysInMonth; number++) {
-      const date = `${year}-${String(month).padStart(2,"0")}-${String(number).padStart(2,"0")}`;
+      const date = `${year}-${String(month).padStart(2, "0")}-${String(number).padStart(2, "0")}`;
       const isPast = date < today;
       const isFull = fullDays.has(number);
       const isSelected = date === initialSelected && !isFull && !isPast;
@@ -1461,13 +1461,13 @@ const restoreTravelerDraft = () => {
     const currentMonth = localToday().slice(0, 7);
     monthInput.min = currentMonth;
     let savedDate = selectedDateInput?.value || "";
-    try { savedDate = sessionStorage.getItem(TRIP_DATE_KEY) || savedDate; } catch (_) {}
+    try { savedDate = sessionStorage.getItem(TRIP_DATE_KEY) || savedDate; } catch (_) { }
     if (/^\d{4}-\d{2}-\d{2}$/.test(savedDate) && savedDate >= localToday()) monthInput.value = savedDate.slice(0, 7);
     if (monthInput.value < currentMonth) monthInput.value = currentMonth;
     renderCalendar(monthInput.value, savedDate >= localToday() ? savedDate : "");
     monthInput.addEventListener("change", () => {
       if (monthInput.value < localToday().slice(0, 7)) monthInput.value = localToday().slice(0, 7);
-      try { sessionStorage.removeItem(TRIP_DATE_KEY); } catch (_) {}
+      try { sessionStorage.removeItem(TRIP_DATE_KEY); } catch (_) { }
       renderCalendar(monthInput.value);
     });
   }
@@ -1495,8 +1495,8 @@ const restoreTravelerDraft = () => {
 
   if (page === "status-timeline") {
     let status = "pending";
-    try { status = (sessionStorage.getItem(STATUS_KEY) || status).toLowerCase(); } catch (_) {}
-    const aliases = {"payment-deadline-passed":"expired", "booking-closed":"closed", "cancellation-result":"cancelled"};
+    try { status = (sessionStorage.getItem(STATUS_KEY) || status).toLowerCase(); } catch (_) { }
+    const aliases = { "payment-deadline-passed": "expired", "booking-closed": "closed", "cancellation-result": "cancelled" };
     status = aliases[status] || status;
     const panels = [...document.querySelectorAll("[data-status-panel]")];
     if (!panels.some((panel) => panel.dataset.statusPanel === status)) status = "pending";
@@ -1511,7 +1511,7 @@ const restoreTravelerDraft = () => {
     event.preventDefault();
     if (!track.reportValidity()) return;
     const choice = track.elements.status.value;
-    const routes = {pending:"booking_pending.html",approved:"request_approved.html",confirmed:"booking_confirmed.html",expired:"payment_deadline_passed.html",closed:"booking_closed.html",cancelled:"cancellation_result.html","not-found":"track_not_found.html"};
+    const routes = { pending: "booking_pending.html", approved: "request_approved.html", confirmed: "booking_confirmed.html", expired: "payment_deadline_passed.html", closed: "booking_closed.html", cancelled: "cancellation_result.html", "not-found": "track_not_found.html" };
     saveStatus(choice);
     go(routes[choice] || "track_not_found.html");
   });
@@ -1577,18 +1577,20 @@ const restoreTravelerDraft = () => {
       event.preventDefault();
       if (!loginForm.reportValidity()) return;
       const role = loginForm.querySelector("#login-role").value === "owner" ? "owner" : "staff";
-      try { sessionStorage.setItem(ROLE_KEY, role); } catch (_) {}
-      go(role === "owner" ? "owner_dashboard.html" : "staff_dashboard.html");
+      try { sessionStorage.setItem(ROLE_KEY, role); } catch (_) { }
+      go(role === "owner" ? "A104owner_dashboard.html" : "A102staff_dashboard.html");
     });
   }
   if (pageRole === "owner" && currentRole === "staff") {
-    try { sessionStorage.setItem(NOTICE_KEY, "That page is for management / owner accounts only."); } catch (_) {}
-    go("staff_dashboard.html");
+    try { sessionStorage.setItem(NOTICE_KEY, "That page is for management / owner accounts only."); } catch (_) { }
+    go("A102staff_dashboard.html");
   }
   try {
     const notice = sessionStorage.getItem(NOTICE_KEY);
     if (notice) { sessionStorage.removeItem(NOTICE_KEY); announce(notice); }
-  } catch (_) {}
+  } catch (_) { }
+
+  //header navigation links
   if (pageRole === "staff" && currentRole === "owner") {
     const ownerLinks = [["owner_dashboard.html", "Dashboard"], ["all_company_bookings.html", "Bookings"], ["payments_list.html", "Payments"], ["change_requests_list.html", "Change requests"], ["review_release_refunds.html", "Refunds"], ["manage_services_rates.html", "Services & rates"], ["booking_payment_reports.html", "Reports"], ["manage_staff_accounts.html", "Staff"], ["business_system_settings.html", "Settings"]];
     const nav = document.getElementById("primary-nav");
@@ -1598,7 +1600,7 @@ const restoreTravelerDraft = () => {
     }
     const ownerBadge = document.querySelector(".portal-badge");
     if (ownerBadge) { ownerBadge.textContent = "OWNER"; ownerBadge.setAttribute("href", "owner_dashboard.html"); }
-    document.querySelectorAll('a[href="staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
+    document.querySelectorAll('a[href="A102staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
   }
   if (pageRole === "staff" || pageRole === "owner") {
     document.querySelectorAll("#primary-nav a").forEach((link) => {
