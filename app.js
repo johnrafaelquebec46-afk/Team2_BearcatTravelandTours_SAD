@@ -739,6 +739,37 @@
     }, 100);
   }
   
+  // Reset calendar selected date when landing or navigating Back to Check Travel Availability
+  if (/check travel availability/i.test(document.body.innerText)) {
+    const resetAvailabilityCalendar = () => {
+      sessionStorage.removeItem("bearcat_prefill_date");
+
+      // Clear any active/selected date tiles on the calendar grid
+      document.querySelectorAll("button, a, div, td").forEach((tile) => {
+        if (tile.children.length > 2) return;
+        const txt = tile.textContent.trim();
+        if (/^\d{1,2}\s*SELECTED$/i.test(txt)) {
+          const dayNum = txt.match(/^(\d{1,2})/)?.[1] || "";
+          tile.innerHTML = `${dayNum}<br><small>OPEN</small>`;
+          tile.classList.remove("is-selected", "selected", "active");
+          tile.style.backgroundColor = "";
+          tile.style.borderColor = "";
+        }
+      });
+
+      // Reset "Selected date" summary row on the right card back to placeholder
+      document.querySelectorAll("div, li, tr").forEach((row) => {
+        if (row.children.length === 2 && row.children[0].textContent.trim() === "Selected date") {
+          row.children[1].textContent = "—";
+        }
+      });
+    };
+
+    resetAvailabilityCalendar();
+    setTimeout(resetAvailabilityCalendar, 60);
+    window.addEventListener("pageshow", resetAvailabilityCalendar);
+  }
+  
   // Capture-phase final commit on Booking Review page
   document.addEventListener(
     "click",
