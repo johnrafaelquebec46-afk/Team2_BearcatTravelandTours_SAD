@@ -1,25 +1,143 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#FDF3F3">
-<meta name="description" content="Bearcat Travel & Tours customer booking demo — Check travel availability.">
-<title>Check travel availability | Bearcat Travel &amp; Tours</title>
-<link rel="stylesheet" href="styles.css">
-<script src="app.js" defer></script>
-</head>
-<body data-page="availability">
-<a class="skip-link" href="#main">Skip to main content</a>
-<header class="site-header">
-  <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
-  <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
-  <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a href="services.html">Services</a><a href="booking_details.html">Booking request</a><a href="track_booking.html">Track booking</a></nav>
-  <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
-</header>
-<main id="main" class="page-shell">
-  <header class="page-heading"><p class="eyebrow">CUSTOMER · DATE CHECK</p><h1>Check travel availability</h1><p>Choose a requested date and review the availability status.</p></header>
-  <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
-  <div class="availability-grid"><form id="availability-form" class="surface calendar-panel" data-next="booking_details.html"><h2>Availability and travel dates</h2><div class="calendar-controls"><div><label for="calendar-service">Service</label><select id="calendar-service" required><option value="">Selected service</option><option>Travel package</option><option>Tour service</option></select></div><div><label for="calendar-month">Month</label><input id="calendar-month" type="month" value="2026-11" aria-label="Choose month and year" required></div></div><div class="calendar-weekdays" aria-hidden="true"><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span></div><div class="calendar-days" role="group" aria-label="Select an available travel date"><span class="calendar-empty" aria-hidden="true"></span><span class="calendar-empty" aria-hidden="true"></span><button class="calendar-day open" type="button" data-calendar-day="1" data-availability="open" aria-pressed="false" aria-label="Day 1, OPEN"><span>1</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="2" data-availability="open" aria-pressed="false" aria-label="Day 2, OPEN"><span>2</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="3" data-availability="open" aria-pressed="false" aria-label="Day 3, OPEN"><span>3</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="4" data-availability="open" aria-pressed="false" aria-label="Day 4, OPEN"><span>4</span><small>OPEN</small></button><button class="calendar-day full" type="button" data-calendar-day="5" data-availability="full" aria-pressed="false" aria-label="Day 5, FULL" disabled aria-disabled="true"><span>5</span><small>FULL</small></button><button class="calendar-day open" type="button" data-calendar-day="6" data-availability="open" aria-pressed="false" aria-label="Day 6, OPEN"><span>6</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="7" data-availability="open" aria-pressed="false" aria-label="Day 7, OPEN"><span>7</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="8" data-availability="open" aria-pressed="false" aria-label="Day 8, OPEN"><span>8</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="9" data-availability="open" aria-pressed="false" aria-label="Day 9, OPEN"><span>9</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="10" data-availability="open" aria-pressed="false" aria-label="Day 10, OPEN"><span>10</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="11" data-availability="open" aria-pressed="false" aria-label="Day 11, OPEN"><span>11</span><small>OPEN</small></button><button class="calendar-day full" type="button" data-calendar-day="12" data-availability="full" aria-pressed="false" aria-label="Day 12, FULL" disabled aria-disabled="true"><span>12</span><small>FULL</small></button><button class="calendar-day full" type="button" data-calendar-day="13" data-availability="full" aria-pressed="false" aria-label="Day 13, FULL" disabled aria-disabled="true"><span>13</span><small>FULL</small></button><button class="calendar-day selected is-selected" type="button" data-calendar-day="14" data-availability="selected" aria-pressed="true" aria-label="Day 14, SELECTED"><span>14</span><small>SELECTED</small></button><button class="calendar-day open" type="button" data-calendar-day="15" data-availability="open" aria-pressed="false" aria-label="Day 15, OPEN"><span>15</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="16" data-availability="open" aria-pressed="false" aria-label="Day 16, OPEN"><span>16</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="17" data-availability="open" aria-pressed="false" aria-label="Day 17, OPEN"><span>17</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="18" data-availability="open" aria-pressed="false" aria-label="Day 18, OPEN"><span>18</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="19" data-availability="open" aria-pressed="false" aria-label="Day 19, OPEN"><span>19</span><small>OPEN</small></button><button class="calendar-day full" type="button" data-calendar-day="20" data-availability="full" aria-pressed="false" aria-label="Day 20, FULL" disabled aria-disabled="true"><span>20</span><small>FULL</small></button><button class="calendar-day open" type="button" data-calendar-day="21" data-availability="open" aria-pressed="false" aria-label="Day 21, OPEN"><span>21</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="22" data-availability="open" aria-pressed="false" aria-label="Day 22, OPEN"><span>22</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="23" data-availability="open" aria-pressed="false" aria-label="Day 23, OPEN"><span>23</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="24" data-availability="open" aria-pressed="false" aria-label="Day 24, OPEN"><span>24</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="25" data-availability="open" aria-pressed="false" aria-label="Day 25, OPEN"><span>25</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="26" data-availability="open" aria-pressed="false" aria-label="Day 26, OPEN"><span>26</span><small>OPEN</small></button><button class="calendar-day full" type="button" data-calendar-day="27" data-availability="full" aria-pressed="false" aria-label="Day 27, FULL" disabled aria-disabled="true"><span>27</span><small>FULL</small></button><button class="calendar-day open" type="button" data-calendar-day="28" data-availability="open" aria-pressed="false" aria-label="Day 28, OPEN"><span>28</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="29" data-availability="open" aria-pressed="false" aria-label="Day 29, OPEN"><span>29</span><small>OPEN</small></button><button class="calendar-day open" type="button" data-calendar-day="30" data-availability="open" aria-pressed="false" aria-label="Day 30, OPEN"><span>30</span><small>OPEN</small></button></div><p class="hint">Availability is a wireframe example and must be checked by staff before approval.</p><input id="calendar-selected-date" type="hidden" name="selectedDate" value="2026-11-14"><button class="button button-primary" type="submit">Continue to booking</button></form><section class="surface content-card lavender-panel availability-summary"><h2>Booking availability</h2><dl class="summary-list"><div><dt>Selected date</dt><dd id="selected-date-display" aria-live="polite">Nov 14, 2026</dd></div><div><dt>Travelers</dt><dd>—</dd></div><div><dt>Remaining seats</dt><dd>—</dd></div><div><dt>Status</dt><dd><span class="status-pill status-available">Available</span></dd></div></dl><div class="notice">Availability is checked by staff before approval.</div><div class="actions"><button class="button button-primary" type="submit" form="availability-form">Continue to booking</button><a class="button button-soft" href="service_details.html">Return</a></div></section></div>\n</main>
 
-</body></html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FDF3F3">
+  <meta name="description" content="Bearcat Travel & Tours customer booking demo — Check travel availability.">
+  <title>Check travel availability | Bearcat Travel &amp; Tours</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<!--Calendar on client side for date avalability-->
+<body data-page="availability">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark"
+        aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+    <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a
+        href="services.html">Services</a><a href="booking_details.html">Booking request</a><a
+        href="track_booking.html">Track booking</a></nav>
+    <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
+  </header>
+  <main id="main" class="page-shell">
+    <header class="page-heading">
+      <p class="eyebrow">CUSTOMER · DATE CHECK</p>
+      <h1>Check travel availability</h1>
+      <p>Choose a requested date and review the availability status.</p>
+    </header>
+    <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
+    <div class="availability-grid">
+      <form id="availability-form" class="surface calendar-panel" data-next="booking_details.html">
+        <h2>Availability and travel dates</h2>
+        <div class="calendar-controls">
+          <div><label for="calendar-service">Service</label><select id="calendar-service" required>
+              <option value="">Selected service</option>
+              <option>Travel package</option>
+              <option>Tour service</option>
+            </select></div>
+          <div><label for="calendar-month">Month</label><input id="calendar-month" type="month" value="2026-11"
+              aria-label="Choose month and year" required></div>
+        </div>
+        <div class="calendar-weekdays" aria-hidden="true">
+          <span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span>
+        </div>
+        <div class="calendar-days" role="group" aria-label="Select an available travel date"><span
+            class="calendar-empty" aria-hidden="true"></span><span class="calendar-empty"
+            aria-hidden="true"></span><button class="calendar-day open" type="button" data-calendar-day="1"
+            data-availability="open" aria-pressed="false"
+            aria-label="Day 1, OPEN"><span>1</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="2" data-availability="open" aria-pressed="false"
+            aria-label="Day 2, OPEN"><span>2</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="3" data-availability="open" aria-pressed="false"
+            aria-label="Day 3, OPEN"><span>3</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="4" data-availability="open" aria-pressed="false"
+            aria-label="Day 4, OPEN"><span>4</span><small>OPEN</small></button><button class="calendar-day full"
+            type="button" data-calendar-day="5" data-availability="full" aria-pressed="false" aria-label="Day 5, FULL"
+            disabled aria-disabled="true"><span>5</span><small>FULL</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="6" data-availability="open" aria-pressed="false"
+            aria-label="Day 6, OPEN"><span>6</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="7" data-availability="open" aria-pressed="false"
+            aria-label="Day 7, OPEN"><span>7</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="8" data-availability="open" aria-pressed="false"
+            aria-label="Day 8, OPEN"><span>8</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="9" data-availability="open" aria-pressed="false"
+            aria-label="Day 9, OPEN"><span>9</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="10" data-availability="open" aria-pressed="false"
+            aria-label="Day 10, OPEN"><span>10</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="11" data-availability="open" aria-pressed="false"
+            aria-label="Day 11, OPEN"><span>11</span><small>OPEN</small></button><button class="calendar-day full"
+            type="button" data-calendar-day="12" data-availability="full" aria-pressed="false" aria-label="Day 12, FULL"
+            disabled aria-disabled="true"><span>12</span><small>FULL</small></button><button class="calendar-day full"
+            type="button" data-calendar-day="13" data-availability="full" aria-pressed="false" aria-label="Day 13, FULL"
+            disabled aria-disabled="true"><span>13</span><small>FULL</small></button><button
+            class="calendar-day selected is-selected" type="button" data-calendar-day="14" data-availability="selected"
+            aria-pressed="true" aria-label="Day 14, SELECTED"><span>14</span><small>SELECTED</small></button><button
+            class="calendar-day open" type="button" data-calendar-day="15" data-availability="open" aria-pressed="false"
+            aria-label="Day 15, OPEN"><span>15</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="16" data-availability="open" aria-pressed="false"
+            aria-label="Day 16, OPEN"><span>16</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="17" data-availability="open" aria-pressed="false"
+            aria-label="Day 17, OPEN"><span>17</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="18" data-availability="open" aria-pressed="false"
+            aria-label="Day 18, OPEN"><span>18</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="19" data-availability="open" aria-pressed="false"
+            aria-label="Day 19, OPEN"><span>19</span><small>OPEN</small></button><button class="calendar-day full"
+            type="button" data-calendar-day="20" data-availability="full" aria-pressed="false" aria-label="Day 20, FULL"
+            disabled aria-disabled="true"><span>20</span><small>FULL</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="21" data-availability="open" aria-pressed="false"
+            aria-label="Day 21, OPEN"><span>21</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="22" data-availability="open" aria-pressed="false"
+            aria-label="Day 22, OPEN"><span>22</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="23" data-availability="open" aria-pressed="false"
+            aria-label="Day 23, OPEN"><span>23</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="24" data-availability="open" aria-pressed="false"
+            aria-label="Day 24, OPEN"><span>24</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="25" data-availability="open" aria-pressed="false"
+            aria-label="Day 25, OPEN"><span>25</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="26" data-availability="open" aria-pressed="false"
+            aria-label="Day 26, OPEN"><span>26</span><small>OPEN</small></button><button class="calendar-day full"
+            type="button" data-calendar-day="27" data-availability="full" aria-pressed="false" aria-label="Day 27, FULL"
+            disabled aria-disabled="true"><span>27</span><small>FULL</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="28" data-availability="open" aria-pressed="false"
+            aria-label="Day 28, OPEN"><span>28</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="29" data-availability="open" aria-pressed="false"
+            aria-label="Day 29, OPEN"><span>29</span><small>OPEN</small></button><button class="calendar-day open"
+            type="button" data-calendar-day="30" data-availability="open" aria-pressed="false"
+            aria-label="Day 30, OPEN"><span>30</span><small>OPEN</small></button></div>
+        <p class="hint">Availability is a wireframe example and must be checked by staff before approval.</p><input
+          id="calendar-selected-date" type="hidden" name="selectedDate" value="2026-11-14"><button
+          class="button button-primary" type="submit">Continue to booking</button>
+      </form>
+      <section class="surface content-card lavender-panel availability-summary">
+        <h2>Booking availability</h2>
+        <dl class="summary-list">
+          <div>
+            <dt>Selected date</dt>
+            <dd id="selected-date-display" aria-live="polite">Nov 14, 2026</dd>
+          </div>
+          <div>
+            <dt>Travelers</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Remaining seats</dt>
+            <dd>—</dd>
+          </div>
+          <div>
+            <dt>Status</dt>
+            <dd><span class="status-pill status-available">Available</span></dd>
+          </div>
+        </dl>
+        <div class="notice">Availability is checked by staff before approval.</div>
+        <div class="actions"><button class="button button-primary" type="submit" form="availability-form">Continue to
+            booking</button><a class="button button-soft" href="service_details.html">Return</a></div>
+      </section>
+    </div>\n
+  </main>
+
+</body>
+
+</html>
