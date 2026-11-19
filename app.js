@@ -421,6 +421,117 @@
     renderReviewTravelers();
     setTimeout(renderReviewTravelers, 60);
   }
+// Client : PHP/Laravel Database Routing Bridge & Data Integrity Layer
+  const BearcatApiBridge = (() => {
+    const API_BASE = (document.querySelector('meta[name="api-base"]')?.content || "/api").replace(/\/+$/, "");
+    const inFlightRequests = new Set();
+
+    const getCsrfToken = () =>
+      document.querySelector('meta[name="csrf-token"]')?.content ||
+      document.querySelector('input[name="_token"]')?.value ||
+      "";
+
+    const maskSensitiveId = (rawId) => {
+      const str = String(rawId || "").trim();
+      if (!str) return "";
+      const [prefix, num] = str.includes(":") ? str.split(":") : ["", str];
+      const visible = num.slice(-4).padStart(num.length, "*");
+      return prefix ? `${prefix}:${visible}` : visible;
+    };
+
+    const validateRelationalPayload = (payload) => {
+      if (!payload || typeof payload !== "object") return false;
+      const { customer, booking, item, travelers } = payload;
+      if (!customer?.full_name || !customer?.email || !customer?.contact_no) return false;
+      if (!booking?.booking_ref || !item?.service_id || !item?.service_date) return false;
+      if (!Array.isArray(travelers) || travelers.length === 0) return false;
+      return travelers.every((t) => t.full_name && t.birthdate && BearcatIntegrity.isValidIdNumber(t.id_no));
+    };
+
+    async function request(endpoint, { method = "GET", body = null, lockKey = "" } = {}) {
+      if (lockKey && inFlightRequests.has(lockKey)) {
+        return { ok: false, duplicate: true, message: "Request already in progress." };
+      }
+      if (lockKey) inFlightRequests.add(lockKey);
+
+      try {
+        const headers = {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        };
+        const csrf = getCsrfToken();
+        if (csrf) headers["X-CSRF-TOKEN"] = csrf;
+        if (body && !(body instanceof FormData)) {
+          headers["Content-Type"] = "application/json";
+        }
+
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+          method,
+          headers,
+          credentials: "same-origin",
+          body: body ? (body instanceof FormData ? body : JSON.stringify(body)) : undefined
+        });
+
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          return { ok: false, offlineFallback: true, status: res.status };
+        }
+        const data = await res.json();
+        return { ok: res.ok, status: res.status, data };
+      } catch (_) {
+        // Static Live Server / offline fallback
+        return { ok: false, offlineFallback: true };
+      } finally {
+        if (lockKey) inFlightRequests.delete(lockKey);
+      }
+    }
+
+    return {
+      maskSensitiveId,
+      validateRelationalPayload,
+      fetchServices() {
+        return request("/services");
+      },
+      async submitBooking(payload) {
+        if (!validateRelationalPayload(payload)) {
+          return { ok: false, message: "Relational data integrity check failed." };
+        }
+        const res = await request("/bookings", {
+          method: "POST",
+          body: payload,
+          lockKey: `booking:${payload.booking.booking_ref}`
+        });
+        // Mask sensitive traveler IDs in browser cache while full payload goes to PHP/Laravel DB
+        if (Array.isArray(payload.travelers)) {
+          payload.travelers = payload.travelers.map((t) => ({
+            ...t,
+            id_no_masked: maskSensitiveId(t.id_no)
+          }));
+        }
+        return res;
+      },
+      trackBooking(bookingRef) {
+        const cleanRef = encodeURIComponent(BearcatIntegrity.sanitize(bookingRef, 30).toUpperCase());
+        return request(`/bookings/${cleanRef}`);
+      },
+      submitPayment(paymentPayload) {
+        return request("/payments", {
+          method: "POST",
+          body: paymentPayload,
+          lockKey: `payment:${paymentPayload.booking_id || paymentPayload.reference_no}`
+        });
+      },
+      submitChangeRequest(changePayload) {
+        return request("/booking-changes", {
+          method: "POST",
+          body: changePayload,
+          lockKey: `change:${changePayload.booking_id}:${changePayload.request_type}`
+        });
+      }
+    };
+  })();
+
+  window.BearcatApiBridge = BearcatApiBridge;
 
   // Capture-phase final commit on Booking Review page
   document.addEventListener(
