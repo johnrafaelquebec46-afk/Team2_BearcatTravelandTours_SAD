@@ -1,93 +1,154 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#FDF3F3">
-<meta name="description" content="Bearcat Travel &amp; Tours customer booking demo — Traveler information.">
-<title>Traveler information | Bearcat Travel &amp; Tours</title>
-<link rel="stylesheet" href="styles.css">
-<script src="app.js" defer></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FDF3F3">
+  <meta name="description" content="Bearcat Travel &amp; Tours customer booking demo — Traveler information.">
+  <title>Traveler information | Bearcat Travel &amp; Tours</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
 </head>
+
 <body data-page="traveler-details-three">
-<a class="skip-link" href="#main">Skip to main content</a>
-<header class="site-header">
-  <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
-  <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
-  <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a href="services.html">Services</a><a href="booking_details.html">Booking request</a><a href="track_booking.html">Track booking</a></nav>
-  <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
-</header>
-<main id="main" class="page-shell">
-  <header class="page-heading"><p class="eyebrow">CUSTOMER · BOOKING REQUEST · STEP 2 OF 3</p><h1>Traveler information</h1><p>Add one traveler record for each person in your trip details.</p></header>
-  <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
-  <div class="stepper"><span class="complete">✓&nbsp; Trip details</span><span class="current">2&nbsp; Travelers</span><span>3&nbsp; Review</span></div>
-  <form id="traveler-entry-form" class="surface form-card traveler-entry-form" data-next="booking_review.html" data-initial-count="3">
-   <div class="traveler-grid" data-traveler-grid aria-live="polite">
-    <fieldset class="traveler-card" data-traveler-card="1">
-  <legend>Traveler 1</legend>
-  <label for="traveler-1-name">Full name as shown on ID</label>
-  <input id="traveler-1-name" name="traveler[1][name]" autocomplete="name" placeholder="Traveler full name" required>
-  <div class="inline-fields">
-   <div><label for="traveler-1-birth">Birthdate</label><input id="traveler-1-birth" name="traveler[1][birthdate]" type="date" required></div>
-   <div><label for="traveler-1-id-type">Accepted ID type</label><select id="traveler-1-id-type" name="traveler[1][idType]" data-id-type required><option value="">Select an ID</option><option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option><option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option></select></div>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark"
+        aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+    <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a
+        href="services.html">Services</a><a href="booking_details.html">Booking request</a><a
+        href="track_booking.html">Track booking</a></nav>
+    <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
+  </header>
+  <main id="main" class="page-shell">
+    <header class="page-heading">
+      <p class="eyebrow">CUSTOMER · BOOKING REQUEST · STEP 2 OF 3</p>
+      <h1>Traveler information</h1>
+      <p>Add one traveler record for each person in your trip details.</p>
+    </header>
+    <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
+    <div class="stepper"><span class="complete">✓&nbsp; Trip details</span><span class="current">2&nbsp;
+        Travelers</span><span>3&nbsp; Review</span></div>
+    <form id="traveler-entry-form" class="surface form-card traveler-entry-form" data-next="booking_review.html"
+      data-initial-count="3">
+      <div class="traveler-grid" data-traveler-grid aria-live="polite">
+        <fieldset class="traveler-card" data-traveler-card="1">
+          <legend>Traveler 1</legend>
+          <label for="traveler-1-name">Full name as shown on ID</label>
+          <input id="traveler-1-name" name="traveler[1][name]" autocomplete="name" placeholder="Traveler full name"
+            required>
+          <div class="inline-fields">
+            <div><label for="traveler-1-birth">Birthdate</label><input id="traveler-1-birth"
+                name="traveler[1][birthdate]" type="date" required></div>
+            <div><label for="traveler-1-id-type">Accepted ID type</label><select id="traveler-1-id-type"
+                name="traveler[1][idType]" data-id-type required>
+                <option value="">Select an ID</option>
+                <option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option>
+                <option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option>
+              </select></div>
+          </div>
+          <label for="traveler-1-id-number">ID number</label>
+          <input id="traveler-1-id-number" name="traveler[1][idNumber]" data-id-number type="text" inputmode="numeric"
+            autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-1-id-help"
+            placeholder="Select ID type first" required>
+          <p id="traveler-1-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
+        </fieldset>
+        <fieldset class="traveler-card" data-traveler-card="2">
+          <legend>Traveler 2</legend>
+          <label for="traveler-2-name">Full name as shown on ID</label>
+          <input id="traveler-2-name" name="traveler[2][name]" autocomplete="name" placeholder="Traveler full name"
+            required>
+          <div class="inline-fields">
+            <div><label for="traveler-2-birth">Birthdate</label><input id="traveler-2-birth"
+                name="traveler[2][birthdate]" type="date" required></div>
+            <div><label for="traveler-2-id-type">Accepted ID type</label><select id="traveler-2-id-type"
+                name="traveler[2][idType]" data-id-type required>
+                <option value="">Select an ID</option>
+                <option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option>
+                <option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option>
+              </select></div>
+          </div>
+          <label for="traveler-2-id-number">ID number</label>
+          <input id="traveler-2-id-number" name="traveler[2][idNumber]" data-id-number type="text" inputmode="numeric"
+            autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-2-id-help"
+            placeholder="Select ID type first" required>
+          <p id="traveler-2-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
+        </fieldset>
+        <fieldset class="traveler-card" data-traveler-card="3">
+          <legend>Traveler 3</legend>
+          <label for="traveler-3-name">Full name as shown on ID</label>
+          <input id="traveler-3-name" name="traveler[3][name]" autocomplete="name" placeholder="Traveler full name"
+            required>
+          <div class="inline-fields">
+            <div><label for="traveler-3-birth">Birthdate</label><input id="traveler-3-birth"
+                name="traveler[3][birthdate]" type="date" required></div>
+            <div><label for="traveler-3-id-type">Accepted ID type</label><select id="traveler-3-id-type"
+                name="traveler[3][idType]" data-id-type required>
+                <option value="">Select an ID</option>
+                <option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option>
+                <option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option>
+              </select></div>
+          </div>
+          <label for="traveler-3-id-number">ID number</label>
+          <input id="traveler-3-id-number" name="traveler[3][idNumber]" data-id-number type="text" inputmode="numeric"
+            autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-3-id-help"
+            placeholder="Select ID type first" required>
+          <p id="traveler-3-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
+        </fieldset>
+      </div>
+      <div class="actions traveler-actions"><a class="button button-soft" href="booking_details.html">Back</a><button
+          class="button button-soft" type="button" data-add-traveler>+ Add another traveler</button><button
+          class="button button-primary" type="submit">Continue to review</button></div>
+      <p class="hint">Traveler count starts from the number entered in Trip details. You can add more travelers after
+        confirming the request. Use sample information only; this demo does not store ID numbers.</p>
+      <p class="hint">The wireframe does not specify the company’s accepted ID list. These ID formats are examples;
+        Bearcat staff must confirm acceptance.</p>
+    </form>
+  </main>
+  <div class="confirmation-backdrop" id="traveler-confirmation" hidden>
+    <section class="confirmation-panel" role="dialog" aria-modal="true" aria-labelledby="traveler-confirmation-title"
+      aria-describedby="traveler-confirmation-copy" tabindex="-1">
+      <p class="eyebrow">TRAVELER COUNT</p>
+      <h2 id="traveler-confirmation-title">Add another traveler?</h2>
+      <p id="traveler-confirmation-copy">This will exceed the number of travelers entered in Trip details. Do you want
+        to continue?</p>
+      <div class="actions"><button class="button button-soft" type="button" data-cancel-add>Cancel</button><button
+          class="button button-primary" type="button" data-confirm-add>Yes, add traveler</button></div>
+    </section>
   </div>
-  <label for="traveler-1-id-number">ID number</label>
-  <input id="traveler-1-id-number" name="traveler[1][idNumber]" data-id-number type="text" inputmode="numeric" autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-1-id-help" placeholder="Select ID type first" required>
-  <p id="traveler-1-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
-</fieldset><fieldset class="traveler-card" data-traveler-card="2">
-  <legend>Traveler 2</legend>
-  <label for="traveler-2-name">Full name as shown on ID</label>
-  <input id="traveler-2-name" name="traveler[2][name]" autocomplete="name" placeholder="Traveler full name" required>
-  <div class="inline-fields">
-   <div><label for="traveler-2-birth">Birthdate</label><input id="traveler-2-birth" name="traveler[2][birthdate]" type="date" required></div>
-   <div><label for="traveler-2-id-type">Accepted ID type</label><select id="traveler-2-id-type" name="traveler[2][idType]" data-id-type required><option value="">Select an ID</option><option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option><option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option></select></div>
+  <div class="confirmation-backdrop" id="traveler-rejection-notification" hidden>
+    <section class="confirmation-panel" role="alertdialog" aria-modal="true" aria-labelledby="traveler-rejection-title"
+      aria-describedby="traveler-rejection-copy" tabindex="-1">
+      <p class="eyebrow">REQUEST NOT ACCEPTED</p>
+      <h2 id="traveler-rejection-title">An adult traveler is required</h2>
+      <p id="traveler-rejection-copy">A traveler under 18 cannot continue alone. Add at least one accompanying traveler
+        who is 18 or older before submitting this request.</p>
+      <div class="actions"><button class="button button-primary" type="button" data-close-rejection>Return to traveler
+          information</button></div>
+    </section>
   </div>
-  <label for="traveler-2-id-number">ID number</label>
-  <input id="traveler-2-id-number" name="traveler[2][idNumber]" data-id-number type="text" inputmode="numeric" autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-2-id-help" placeholder="Select ID type first" required>
-  <p id="traveler-2-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
-</fieldset><fieldset class="traveler-card" data-traveler-card="3">
-  <legend>Traveler 3</legend>
-  <label for="traveler-3-name">Full name as shown on ID</label>
-  <input id="traveler-3-name" name="traveler[3][name]" autocomplete="name" placeholder="Traveler full name" required>
-  <div class="inline-fields">
-   <div><label for="traveler-3-birth">Birthdate</label><input id="traveler-3-birth" name="traveler[3][birthdate]" type="date" required></div>
-   <div><label for="traveler-3-id-type">Accepted ID type</label><select id="traveler-3-id-type" name="traveler[3][idType]" data-id-type required><option value="">Select an ID</option><option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option><option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option></select></div>
+  <div class="confirmation-backdrop" id="guardian-confirmation" hidden>
+    <section class="confirmation-panel guardian-panel" role="dialog" aria-modal="true"
+      aria-labelledby="guardian-confirmation-title" aria-describedby="guardian-confirmation-copy" tabindex="-1">
+      <p class="eyebrow">UNDER-18 TRAVELER</p>
+      <h2 id="guardian-confirmation-title">Confirm the accompanying guardian</h2>
+      <p id="guardian-confirmation-copy">Select the adult traveler, state their relationship to each under-18 traveler,
+        and provide supporting proof. Staff must review the proof.</p>
+      <div class="guardian-fields">
+        <div><label for="guardian-adult-traveler">Accompanying adult traveler (18 or older)</label><select
+            id="guardian-adult-traveler" form="traveler-entry-form" data-guardian-control disabled required>
+            <option value="">Select an adult traveler</option>
+          </select></div>
+        <div id="guardian-minor-fields" class="guardian-minor-fields"></div>
+      </div>
+      <p class="hint">This frontend demo does not upload or save proof files.</p>
+      <div class="actions"><button class="button button-soft" type="button" data-cancel-guardian>Back to traveler
+          information</button><button class="button button-primary" type="button" data-confirm-guardian>Confirm guardian
+          details</button></div>
+    </section>
   </div>
-  <label for="traveler-3-id-number">ID number</label>
-  <input id="traveler-3-id-number" name="traveler[3][idNumber]" data-id-number type="text" inputmode="numeric" autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-3-id-help" placeholder="Select ID type first" required>
-  <p id="traveler-3-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
-</fieldset>
-   </div>
-   <div class="actions traveler-actions"><a class="button button-soft" href="booking_details.html">Back</a><button class="button button-soft" type="button" data-add-traveler>+ Add another traveler</button><button class="button button-primary" type="submit">Continue to review</button></div>
-   <p class="hint">Traveler count starts from the number entered in Trip details. You can add more travelers after confirming the request. Use sample information only; this demo does not store ID numbers.</p>
-   <p class="hint">The wireframe does not specify the company’s accepted ID list. These ID formats are examples; Bearcat staff must confirm acceptance.</p>
-  </form>
-</main>
-<div class="confirmation-backdrop" id="traveler-confirmation" hidden>
- <section class="confirmation-panel" role="dialog" aria-modal="true" aria-labelledby="traveler-confirmation-title" aria-describedby="traveler-confirmation-copy" tabindex="-1">
-  <p class="eyebrow">TRAVELER COUNT</p><h2 id="traveler-confirmation-title">Add another traveler?</h2>
-  <p id="traveler-confirmation-copy">This will exceed the number of travelers entered in Trip details. Do you want to continue?</p>
-  <div class="actions"><button class="button button-soft" type="button" data-cancel-add>Cancel</button><button class="button button-primary" type="button" data-confirm-add>Yes, add traveler</button></div>
- </section>
-</div>
-<div class="confirmation-backdrop" id="traveler-rejection-notification" hidden>
- <section class="confirmation-panel" role="alertdialog" aria-modal="true" aria-labelledby="traveler-rejection-title" aria-describedby="traveler-rejection-copy" tabindex="-1">
-  <p class="eyebrow">REQUEST NOT ACCEPTED</p><h2 id="traveler-rejection-title">An adult traveler is required</h2>
-  <p id="traveler-rejection-copy">A traveler under 18 cannot continue alone. Add at least one accompanying traveler who is 18 or older before submitting this request.</p>
-  <div class="actions"><button class="button button-primary" type="button" data-close-rejection>Return to traveler information</button></div>
- </section>
-</div>
-<div class="confirmation-backdrop" id="guardian-confirmation" hidden>
- <section class="confirmation-panel guardian-panel" role="dialog" aria-modal="true" aria-labelledby="guardian-confirmation-title" aria-describedby="guardian-confirmation-copy" tabindex="-1">
-  <p class="eyebrow">UNDER-18 TRAVELER</p><h2 id="guardian-confirmation-title">Confirm the accompanying guardian</h2>
-  <p id="guardian-confirmation-copy">Select the adult traveler, state their relationship to each under-18 traveler, and provide supporting proof. Staff must review the proof.</p>
-  <div class="guardian-fields">
-   <div><label for="guardian-adult-traveler">Accompanying adult traveler (18 or older)</label><select id="guardian-adult-traveler" form="traveler-entry-form" data-guardian-control disabled required><option value="">Select an adult traveler</option></select></div>
-   <div id="guardian-minor-fields" class="guardian-minor-fields"></div>
-  </div>
-  <p class="hint">This frontend demo does not upload or save proof files.</p>
-  <div class="actions"><button class="button button-soft" type="button" data-cancel-guardian>Back to traveler information</button><button class="button button-primary" type="button" data-confirm-guardian>Confirm guardian details</button></div>
- </section>
-</div>
 </body>
+
 </html>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Bearcat Travel & Tours all company bookings demo.">
+    <title>All company bookings | Bearcat Travel &amp; Tours</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+</head>
+
+<!--ADMIN PAGE for All bookings-->
+<body data-page="all-company-bookings" data-role="owner">
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <header class="site-header">
+        <a class="brand" href="owner_dashboard.html" aria-label="Bearcat Travel and Tours">
+            <span class="brand-mark" aria-hidden="true">B</span>
+            <span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span>
+        </a>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+        <nav class="primary-nav" id="primary-nav" aria-label="Owner navigation">
+            <a href="owner_dashboard.html">Dashboard</a>
+            <a href="all_company_bookings.html">Bookings</a>
+            <a href="payments_list.html">Payments</a>
+            <a href="change_requests_list.html">Change requests</a>
+            <a href="review_release_refunds.html">Refunds</a>
+            <a href="manage_services_rates.html">Services &amp;rates</a>
+            <a href="booking_payment_reports.html">Reports</a>
+            <a href="manage_staff_accounts.html">Staff</a>
+            <a href="business_system_settings.html">Settings</a>
+        </nav>
+        <a class="portal-badge" href="owner_dashboard.html">OWNER</a>
+    </header>
+    <main id="main" class="page-shell">
+        <header class="page-heading">
+            <p class="eyebrow">MANAGEMENT / OWNER · BOOKING OVERSIGHT</p>
+            <h1>All company bookings</h1>
+            <p>View and monitor all customer bookings across the business.</p>
+        </header>
+        <div class="live-message" id="live-message" aria-live="polite" aria-atomic="true"></div>
+        <section class="surface content-card">
+            <h2>Company bookings</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Reference</th>
+                            <th scope="col">Customer</th>
+                            <th scope="col">Service</th>
+                            <th scope="col">Travel date</th>
+                            <th scope="col">Amount</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <!--SHOULD BE POPULATED WITH USER INPUT-->
+                        <tr>
+                            <td>BTT-000124</td>
+                            <td>Jamie Cruz</td>
+                            <td>Travel package</td>
+                            <td>Nov 20, 2026</td>
+                            <td>₱8,000</td>
+                            <td>Pending</td>
+                            <td><a class="button button-soft" href="A205booking_details_owner.html">View</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+    <footer class="site-footer">
+        <p>© 2026 Bearcat Travel &amp; Tours · Staff portal · Demo interface</p>
+    </footer>
+</body>
+
+</html>

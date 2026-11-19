@@ -1,26 +1,85 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#FDF3F3">
-<meta name="description" content="Bearcat Travel & Tours customer booking demo — Request approved.">
-<title>Request approved | Bearcat Travel &amp; Tours</title>
-<link rel="stylesheet" href="styles.css">
-<script src="app.js" defer></script>
-</head>
-<body data-page="request-approved">
-<a class="skip-link" href="#main">Skip to main content</a>
-<header class="site-header">
-  <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
-  <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
-  <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a href="services.html">Services</a><a href="booking_details.html">Booking request</a><a href="track_booking.html">Track booking</a></nav>
-  <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
-</header>
-<main id="main" class="page-shell">
-  <header class="page-heading"><p class="eyebrow">CUSTOMER · APPROVAL NOTICE</p><h1>Your request is approved</h1><p>Review your required deposit and payment deadline below.</p></header>
-  <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
-  <div class="approval-grid"><section class="surface content-card approval-summary"><p class="eyebrow">BOOKING REFERENCE</p><h2 class="booking-reference">BTT-XXXXXX</h2><dl class="summary-list"><div><dt>Booking status</dt><dd><span class="status-pill status-approved">Approved</span></dd></div><div><dt>Service / travel date</dt><dd>Service · MM/DD/YYYY</dd></div><div><dt>Estimated total</dt><dd>₱—</dd></div><div><dt>Deposit rate</dt><dd>30% / 50%</dd></div><div><dt>Down payment due</dt><dd>₱—</dd></div></dl></section><section class="surface content-card lavender-panel"><h2>Payment instructions</h2><p>Complete payment within 1 hour of this approval.</p><dl class="summary-list"><div><dt>Payment method</dt><dd>Method / account details</dd></div><div><dt>Account name</dt><dd>Business account</dd></div><div><dt>Payment reference</dt><dd>Use BTT-XXXXXX</dd></div></dl><div class="actions"><a class="button button-primary" href="submit_payment.html">Submit payment</a><a class="button button-soft" href="track_booking.html">Track booking</a></div></section></div><p class="hint">This approval notice and payment instructions are sent to the customer’s registered contact.</p>
-</main>
 
-</body></html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FDF3F3">
+  <meta name="description" content="Bearcat Travel & Tours customer booking demo — Request approved.">
+  <title>Request approved | Bearcat Travel &amp; Tours</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+
+<body data-page="request-approved">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark"
+        aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+    <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a
+        href="services.html">Services</a><a href="booking_details.html">Booking request</a><a
+        href="track_booking.html">Track booking</a></nav>
+    <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
+  </header>
+  <main id="main" class="page-shell">
+    <header class="page-heading">
+      <p class="eyebrow">CUSTOMER · APPROVAL NOTICE</p>
+      <h1>Your request is approved</h1>
+      <p>Review your required deposit and payment deadline below.</p>
+    </header>
+    <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
+    <div class="approval-grid">
+      <section class="surface content-card approval-summary">
+        <p class="eyebrow">BOOKING REFERENCE</p>
+        <h2 class="booking-reference">BTT-XXXXXX</h2>
+        <dl class="summary-list">
+          <div>
+            <dt>Booking status</dt>
+            <dd><span class="status-pill status-approved">Approved</span></dd>
+          </div>
+          <div>
+            <dt>Service / travel date</dt>
+            <dd>Service · MM/DD/YYYY</dd>
+          </div>
+          <div>
+            <dt>Estimated total</dt>
+            <dd>₱—</dd>
+          </div>
+          <div>
+            <dt>Deposit rate</dt>
+            <dd>30% / 50%</dd>
+          </div>
+          <div>
+            <dt>Down payment due</dt>
+            <dd>₱—</dd>
+          </div>
+        </dl>
+      </section>
+      <section class="surface content-card lavender-panel">
+        <h2>Payment instructions</h2>
+        <p>Complete payment within 1 hour of this approval.</p>
+        <dl class="summary-list">
+          <div>
+            <dt>Payment method</dt>
+            <dd>Method / account details</dd>
+          </div>
+          <div>
+            <dt>Account name</dt>
+            <dd>Business account</dd>
+          </div>
+          <div>
+            <dt>Payment reference</dt>
+            <dd>Use BTT-XXXXXX</dd>
+          </div>
+        </dl>
+        <div class="actions"><a class="button button-primary" href="submit_payment.html">Submit payment</a><a
+            class="button button-soft" href="track_booking.html">Track booking</a></div>
+      </section>
+    </div>
+    <p class="hint">This approval notice and payment instructions are sent to the customer’s registered contact.</p>
+  </main>
+
+</body>
+
+</html>

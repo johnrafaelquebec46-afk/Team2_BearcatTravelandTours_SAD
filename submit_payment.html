@@ -1,26 +1,73 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#FDF3F3">
-<meta name="description" content="Bearcat Travel & Tours customer booking demo — Submit your payment.">
-<title>Submit your payment | Bearcat Travel &amp; Tours</title>
-<link rel="stylesheet" href="styles.css">
-<script src="app.js" defer></script>
-</head>
-<body data-page="submit-payment">
-<a class="skip-link" href="#main">Skip to main content</a>
-<header class="site-header">
-  <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark" aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
-  <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
-  <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a href="services.html">Services</a><a href="booking_details.html">Booking request</a><a href="track_booking.html">Track booking</a></nav>
-  <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
-</header>
-<main id="main" class="page-shell">
-  <header class="page-heading"><p class="eyebrow">CUSTOMER · PAYMENT SUBMISSION</p><h1>Submit your payment</h1><p>Enter the payment details and attach proof for staff verification.</p></header>
-  <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
-  <div class="payment-grid"><section class="surface content-card payment-summary"><p class="eyebrow">AMOUNT DUE</p><h2>₱—</h2><dl class="summary-list"><div><dt>Booking reference</dt><dd class="booking-reference">BTT-XXXXXX</dd></div><div><dt>Deposit rate</dt><dd>30% / 50%</dd></div><div><dt>Deadline</dt><dd>1 hour after approval</dd></div></dl><div class="notice">Use the payment method and account shown in your approval notice.</div></section><form class="surface form-card" data-next="payment_submitted.html"><h2>Payment details</h2><div class="inline-fields"><div><label for="pay-method">Payment method</label><select id="pay-method" required><option value="">Select method</option><option>Method in approval notice</option></select></div><div><label for="pay-amount">Amount paid</label><input id="pay-amount" type="number" min="0.01" step="0.01" placeholder="₱0.00" required></div></div><label for="pay-ref">Transaction reference</label><input id="pay-ref" placeholder="Payment reference number" required><label for="pay-proof">Payment proof</label><input id="pay-proof" type="file" accept="image/*,.pdf" required><button class="button button-primary" type="submit">Submit for verification</button><p class="hint">Payment status remains Submitted until staff verify the details. This demo does not upload proof.</p></form></div>
-</main>
 
-</body></html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FDF3F3">
+  <meta name="description" content="Bearcat Travel & Tours customer booking demo — Submit your payment.">
+  <title>Submit your payment | Bearcat Travel &amp; Tours</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+
+<body data-page="submit-payment">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="Bearcat Travel and Tours home"><span class="brand-mark"
+        aria-hidden="true">B</span><span>BEARCAT<br><small>TRAVEL &amp; TOURS</small></span></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+    <nav id="primary-nav" class="primary-nav" aria-label="Customer navigation"><a href="index.html">Home</a><a
+        href="services.html">Services</a><a href="booking_details.html">Booking request</a><a
+        href="track_booking.html">Track booking</a></nav>
+    <span class="portal-badge" aria-label="Current section">CUSTOMER PORTAL</span>
+  </header>
+  <main id="main" class="page-shell">
+    <header class="page-heading">
+      <p class="eyebrow">CUSTOMER · PAYMENT SUBMISSION</p>
+      <h1>Submit your payment</h1>
+      <p>Enter the payment details and attach proof for staff verification.</p>
+    </header>
+    <div class="live-message" aria-live="polite" aria-atomic="true" id="live-message"></div>
+    <div class="payment-grid">
+      <section class="surface content-card payment-summary">
+        <p class="eyebrow">AMOUNT DUE</p>
+        <h2>₱—</h2>
+        <dl class="summary-list">
+          <div>
+            <dt>Booking reference</dt>
+            <dd class="booking-reference">BTT-XXXXXX</dd>
+          </div>
+          <div>
+            <dt>Deposit rate</dt>
+            <dd>30% / 50%</dd>
+          </div>
+          <div>
+            <dt>Deadline</dt>
+            <dd>1 hour after approval</dd>
+          </div>
+        </dl>
+        <div class="notice">Use the payment method and account shown in your approval notice.</div>
+      </section>
+      <form class="surface form-card" data-next="payment_submitted.html">
+        <h2>Payment details</h2>
+        <div class="inline-fields">
+          <div><label for="pay-method">Payment method</label><select id="pay-method" required>
+              <option value="">Select method</option>
+              <option>Method in approval notice</option>
+            </select></div>
+          <div><label for="pay-amount">Amount paid</label><input id="pay-amount" type="number" min="0.01" step="0.01"
+              placeholder="₱0.00" required></div>
+        </div><label for="pay-ref">Transaction reference</label><input id="pay-ref"
+          placeholder="Payment reference number" required><label for="pay-proof">Payment proof</label><input
+          id="pay-proof" type="file" accept="image/*,.pdf" required><button class="button button-primary"
+          type="submit">Submit for verification</button>
+        <p class="hint">Payment status remains Submitted until staff verify the details. This demo does not upload
+          proof.</p>
+      </form>
+    </div>
+  </main>
+
+</body>
+
+</html>
