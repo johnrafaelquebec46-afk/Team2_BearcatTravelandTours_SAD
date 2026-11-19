@@ -683,7 +683,27 @@
     true
   );
 
-  // Apply pre-filled service & date on Booking Request page (editable, no lock)
+  // Reset saved service when clicking "Booking request" directly in top nav
+  document.addEventListener(
+    "click",
+    (e) => {
+      const navLink = e.target.closest("nav a, header a");
+      if (!navLink) return;
+      if (/booking request/i.test(navLink.textContent.trim())) {
+        sessionStorage.removeItem("bearcat_prefill_service");
+        sessionStorage.removeItem("bearcat_prefill_date");
+        const draft = BearcatBookingFlow.readDraft();
+        if (draft.item) {
+          delete draft.item.service_id;
+          delete draft.item.service_label;
+          BearcatBookingFlow.writeDraft({ item: draft.item });
+        }
+      }
+    },
+    true
+  );
+
+// Apply pre-filled service & date on Booking Request page, or show placeholder if direct
   const bookingServiceEl = document.getElementById("trip-service");
   const bookingDateEl = document.getElementById("trip-date");
   if (bookingServiceEl || bookingDateEl) {
@@ -698,6 +718,16 @@
           bookingServiceEl.dispatchEvent(new Event("change", { bubbles: true }));
         }
         sessionStorage.removeItem("bearcat_prefill_service");
+      } else if (!preService && bookingServiceEl && !BearcatBookingFlow.readDraft()?.item?.service_id) {
+        // Direct navigation to Booking request: insert & select blank placeholder so user must choose
+        let placeholderOpt = bookingServiceEl.querySelector('option[value=""]');
+        if (!placeholderOpt) {
+          placeholderOpt = document.createElement("option");
+          placeholderOpt.value = "";
+          placeholderOpt.textContent = "Select service type...";
+          bookingServiceEl.insertBefore(placeholderOpt, bookingServiceEl.firstChild);
+        }
+        bookingServiceEl.value = "";
       }
 
       const preDate = sessionStorage.getItem("bearcat_prefill_date");
@@ -706,7 +736,7 @@
         bookingDateEl.dispatchEvent(new Event("change", { bubbles: true }));
         sessionStorage.removeItem("bearcat_prefill_date");
       }
-    }, 80);
+    }, 100);
   }
   
   // Capture-phase final commit on Booking Review page
