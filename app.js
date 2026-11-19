@@ -397,26 +397,29 @@
     });
 
     // Replace Traveler list placeholders
-    if (travelers.length > 0) {
+    const renderReviewTravelers = () => {
+      if (travelers.length === 0) return;
       const listHeading = [...document.querySelectorAll("h2, h3, h4, p, strong")].find(
         (el) => el.textContent.trim() === "Traveler list"
       );
       const container = listHeading?.parentElement;
-      if (container) {
-        const existingItems = [...container.querySelectorAll("p, li, div")].filter(
-          (el) => el !== listHeading && /^Traveler\s+\d+/i.test(el.textContent.trim())
-        );
-        if (existingItems.length > 0) {
-          const template = existingItems[0].cloneNode(true);
-          existingItems.forEach((el) => el.remove());
-          travelers.forEach((t, i) => {
-            const line = template.cloneNode(true);
-            line.textContent = `Traveler ${i + 1} · ${t.full_name} · ${t.birthdate} · ${t.id_no}`;
-            container.appendChild(line);
-          });
-        }
-      }
-    }
+      if (!container) return;
+
+      const existingItems = [...container.querySelectorAll("p, li, div")].filter(
+        (el) => el !== listHeading && /^Traveler\s+\d+/i.test(el.textContent.trim())
+      );
+      const template = existingItems[0]?.cloneNode(true) || document.createElement("p");
+      existingItems.forEach((el) => el.remove());
+
+      travelers.forEach((t, i) => {
+        const line = template.cloneNode(true);
+        line.textContent = `Traveler ${i + 1} · ${t.full_name} · ${t.birthdate} · ${t.id_no}`;
+        container.appendChild(line);
+      });
+    };
+
+    renderReviewTravelers();
+    setTimeout(renderReviewTravelers, 60);
   }
 
   // Capture-phase final commit on Booking Review page
@@ -469,6 +472,35 @@
         const matchOpt = [...serviceEl.options].find((o) => o.text === savedDraft.item.service_label || o.value === savedDraft.item.service_label);
         if (matchOpt) serviceEl.value = matchOpt.value;
       }
+      const bookingFormEl = document.getElementById("booking-details-form") || document.querySelector('[data-page-form="booking-details"]');
+    const syncBookingDraft = () => {
+      const serviceInput = document.getElementById("trip-service");
+      const tripType = bookingFormEl?.querySelector('input[name="tripType"]:checked')?.value || "one-way";
+      const serviceLabel = serviceInput?.options?.[serviceInput.selectedIndex]?.text || serviceInput?.value || "Tour Package";
+
+      BearcatBookingFlow.writeDraft({
+        customer: {
+          full_name: BearcatIntegrity.sanitize(document.getElementById("customer-name")?.value, 100),
+          age: document.getElementById("customer-age")?.value || "",
+          email: BearcatIntegrity.sanitize(document.getElementById("customer-email")?.value, 100),
+          contact_no: BearcatIntegrity.sanitize(document.getElementById("customer-phone")?.value, 20)
+        },
+        item: {
+          service_label: BearcatIntegrity.sanitize(serviceLabel, 100),
+          trip_type: tripType,
+          service_date: document.getElementById("trip-date")?.value || "",
+          departure_schedule: document.getElementById("departure-schedule")?.value || "",
+          return_date: tripType === "round-trip" ? document.getElementById("return-date")?.value || "" : "",
+          return_schedule: tripType === "round-trip" ? document.getElementById("return-schedule")?.value || "" : "",
+          pax_qty: Math.max(1, Math.floor(Number(document.getElementById("pax")?.value || 1))),
+          pickup_location: BearcatIntegrity.sanitize(document.getElementById("pickup")?.value, 255),
+          destination: BearcatIntegrity.sanitize(document.getElementById("destination")?.value, 255)
+        }
+      });
+    };
+
+    bookingFormEl?.addEventListener("input", syncBookingDraft);
+    bookingFormEl?.addEventListener("change", syncBookingDraft);
     }
   }
   // Auto-save & auto-restore Traveler Details cards (even when clicking Back)
