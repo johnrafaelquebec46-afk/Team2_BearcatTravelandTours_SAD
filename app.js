@@ -533,26 +533,36 @@
 
   window.BearcatApiBridge = BearcatApiBridge;
 
-  // Pre-select chosen service when navigating from Services page to Booking Details
+  // Lock & pre-select chosen service when navigating from Services / Availability flow
   document.addEventListener(
     "click",
     (e) => {
       const trigger = e.target.closest("a, button");
       if (!trigger) return;
       const btnText = trigger.textContent.trim().toLowerCase();
-      if (!["view & book", "start request", "book this package", "book this tour", "book now"].includes(btnText)) {
-        return;
-      }
+      const isServiceFlowBtn = [
+        "view & book",
+        "start request",
+        "check available dates",
+        "check availability",
+        "book this package",
+        "book this tour",
+        "book now",
+        "proceed to booking",
+        "continue to booking"
+      ].some((phrase) => btnText.includes(phrase));
+
+      if (!isServiceFlowBtn) return;
 
       const card = trigger.closest("article, section, div");
       const heading = card?.querySelector("h1, h2, h3, h4")?.textContent.trim();
       const pageHeading = document.querySelector("main h1, h2")?.textContent.trim();
       const chosenService =
-        heading && !/travel services/i.test(heading)
+        heading && !/travel services|check travel availability|check availability|available dates/i.test(heading)
           ? heading
-          : pageHeading && !/travel services/i.test(pageHeading)
+          : pageHeading && !/travel services|check travel availability|check availability|available dates/i.test(pageHeading)
             ? pageHeading
-            : "";
+            : BearcatBookingFlow.readDraft()?.item?.service_label || "";
 
       if (chosenService) {
         const current = BearcatBookingFlow.readDraft();
@@ -573,30 +583,58 @@
     true
   );
 
-  // Apply pre-selected service on Booking Details page
-  const tripServiceSelect = document.getElementById("trip-service");
-  if (tripServiceSelect) {
-    const applyPreselectedService = () => {
+  // Pre-select service on Booking Details, and LOCK it on Check Travel Availability page
+  const isAvailabilityPage = document.body.innerText.includes("Check travel availability");
+  const allServiceSelects = [...document.querySelectorAll("select")].filter((sel) => {
+    const labelText = sel.closest("div, label")?.textContent?.toLowerCase() || "";
+    const firstOpt = sel.options?.[0]?.text?.toLowerCase() || "";
+    return (
+      sel.id === "trip-service" ||
+      sel.id === "availability-service" ||
+      labelText.includes("service") ||
+      firstOpt.includes("selected service")
+    );
+  });
+
+  if (allServiceSelects.length > 0) {
+    const syncServiceSelects = () => {
       const params = new URLSearchParams(window.location.search);
+      const draftItem = BearcatBookingFlow.readDraft()?.item || {};
       const fromUrl = params.get("service");
-      const fromDraft = BearcatBookingFlow.readDraft()?.item?.service_label;
-      const targetService = (fromUrl || fromDraft || "").trim().toLowerCase();
+      const targetService = (fromUrl || draftItem.service_label || "").trim().toLowerCase();
       if (!targetService) return;
 
-      const match = [...tripServiceSelect.options].find((opt) => {
-        const txt = opt.text.trim().toLowerCase();
-        const val = opt.value.trim().toLowerCase();
-        return txt === targetService || val === targetService || txt.includes(targetService) || targetService.includes(txt);
-      });
+      allServiceSelects.forEach((selectEl) => {
+        const match = [...selectEl.options].find((opt) => {
+          const txt = opt.text.trim().toLowerCase();
+          const val = opt.value.trim().toLowerCase();
+          return (
+            txt === targetService ||
+            val === targetService ||
+            txt.includes(targetService) ||
+            targetService.includes(txt)
+          );
+        });
 
-      if (match) {
-        tripServiceSelect.value = match.value;
-        tripServiceSelect.dispatchEvent(new Event("change", { bubbles: true }));
-      }
+        if (match) {
+          selectEl.value = match.value;
+          selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+
+          // Fix / lock ONLY on Check travel availability page
+          if (isAvailabilityPage) {
+            selectEl.style.pointerEvents = "none";
+            selectEl.style.backgroundColor = "#f3eff7";
+            selectEl.style.color = "#2b2135";
+            selectEl.style.fontWeight = "600";
+            selectEl.setAttribute("aria-readonly", "true");
+            selectEl.tabIndex = -1;
+          }
+        }
+      });
     };
 
-    applyPreselectedService();
-    setTimeout(applyPreselectedService, 60);
+    syncServiceSelects();
+    setTimeout(syncServiceSelects, 60);
   }
   
   // Capture-phase final commit on Booking Review page
