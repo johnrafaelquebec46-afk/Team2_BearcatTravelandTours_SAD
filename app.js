@@ -637,6 +637,78 @@
     setTimeout(syncServiceSelects, 60);
   }
   
+  // Simple pre-fill for Service Type & Date when coming from Services or Availability Calendar
+  document.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target.closest("a, button");
+      if (!btn) return;
+      const label = btn.textContent.trim().toLowerCase();
+
+      // 1. Capture chosen service from Services or Package/Tour detail pages
+      if (["view & book", "start request", "check available dates", "check availability", "book now"].some((k) => label.includes(k))) {
+        const pageContext = `${btn.closest("article, section")?.querySelector("h1, h2, h3")?.textContent || ""} ${document.querySelector("main h1, main h2")?.textContent || ""} ${window.location.pathname}`.toLowerCase();
+        let chosen = "";
+        if (pageContext.includes("custom")) chosen = "custom";
+        else if (pageContext.includes("tour")) chosen = "tour";
+        else if (pageContext.includes("package")) chosen = "package";
+
+        if (chosen) {
+          sessionStorage.setItem("bearcat_prefill_service", chosen);
+        }
+      }
+
+      // 2. Capture chosen service & date on Check Travel Availability page before clicking Continue to booking
+      if (label.includes("continue to booking")) {
+        const svcSelect = document.querySelector("select");
+        if (svcSelect && svcSelect.value) {
+          const valText = `${svcSelect.value} ${svcSelect.options[svcSelect.selectedIndex]?.text || ""}`.toLowerCase();
+          if (valText.includes("custom")) sessionStorage.setItem("bearcat_prefill_service", "custom");
+          else if (valText.includes("tour")) sessionStorage.setItem("bearcat_prefill_service", "tour");
+          else if (valText.includes("package")) sessionStorage.setItem("bearcat_prefill_service", "package");
+        }
+
+        const dateText = document.body.innerText.match(/Selected date\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})/i)?.[1];
+        if (dateText) {
+          const parsed = new Date(dateText);
+          if (!Number.isNaN(parsed.getTime())) {
+            const yyyy = parsed.getFullYear();
+            const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+            const dd = String(parsed.getDate()).padStart(2, "0");
+            sessionStorage.setItem("bearcat_prefill_date", `${yyyy}-${mm}-${dd}`);
+          }
+        }
+      }
+    },
+    true
+  );
+
+  // Apply pre-filled service & date on Booking Request page (editable, no lock)
+  const bookingServiceEl = document.getElementById("trip-service");
+  const bookingDateEl = document.getElementById("trip-date");
+  if (bookingServiceEl || bookingDateEl) {
+    setTimeout(() => {
+      const preService = sessionStorage.getItem("bearcat_prefill_service");
+      if (preService && bookingServiceEl) {
+        const opt = [...bookingServiceEl.options].find((o) =>
+          `${o.value} ${o.text}`.toLowerCase().includes(preService)
+        );
+        if (opt) {
+          bookingServiceEl.value = opt.value;
+          bookingServiceEl.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        sessionStorage.removeItem("bearcat_prefill_service");
+      }
+
+      const preDate = sessionStorage.getItem("bearcat_prefill_date");
+      if (preDate && bookingDateEl && !bookingDateEl.value) {
+        bookingDateEl.value = preDate;
+        bookingDateEl.dispatchEvent(new Event("change", { bubbles: true }));
+        sessionStorage.removeItem("bearcat_prefill_date");
+      }
+    }, 80);
+  }
+  
   // Capture-phase final commit on Booking Review page
   document.addEventListener(
     "click",
