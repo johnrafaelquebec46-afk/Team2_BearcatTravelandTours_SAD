@@ -886,4 +886,145 @@
         flash(`${extend ? 'Deadline extended' : 'Booking closed as expired'} for ${sel.ref}. ${noticeText(n)}`); go('A305expired_payments.html');
         });
     }
+
+    //CHANGE AND CANCELLATION REQUESTS
+    const bookingOfChange = (t, c) => t.all(K.BOOKINGS).find((b) => num(b.booking_id) === num(c.booking_id));
+    const guessDate = (text) => (String(text || '').match(/\b(\d{4}-\d{2}-\d{2})\b/) || [])[1] || '';
+    const feeRange = () => { const s = settings(); const lo = Math.max(Math.round(num(s.change_fee_min)) || 5, 0); const hi = Math.max(Math.round(num(s.change_fee_max)) || 10, lo); return [lo, hi]; };
+
+    /**
+     * Decide a request. decision: 'approve' | 'reject'. Cancellation approval cancels the booking; change approval updates
+     * totals (and the date if given). Fee = pct% of the current total; amount due = fee + any price increase.
+     */
+    function decideChange(t, changeId, { decision, pct, diff, remarks, newDate }) {
+        const c = t.all(K.CHANGES).find((x) => num(x.change_id) === num(changeId)); if (!c) fail('That request could not be found.');
+        if (changeStatus(c.status) !== 'pending') fail('This request has already been decided.');
+        const b = bookingOfChange(t, c); if (!b) fail('The booking for this request no longer exists.');
+        const cancel = isCancelType(c.request_type); const base = c.details;
+        const withRemarks = [base, remarks ? `Staff remarks: ${remarks}` : ''].filter(Boolean).join(' || ');
+        const sid = me().staff_id;
+        if (decision === 'reject') {
+        if (String(remarks || '').length < 3) fail('Enter the reason for rejecting; the customer will see it.');
+        Object.assign(c, { status: 'rejected', decided_by: sid, decided_at: nowIso(), details: withRemarks }); t.dirty(K.CHANGES);
+        audit(t, cancel ? 'Rejected cancellation request' : 'Rejected change request', { booking: b, details: remarks });
+        return { n: notify(t, b, 'change_decision', { status: 'not approved', amount: 0, remarks }), status: 'rejected', due: 0 };
+        }
+        const from = normStatus(b.status);
+        if (TERMINAL.includes(from)) fail(`The booking is already "${statusLabel(from)}", so this request cannot be approved.`);
+        if (cancel) {
+        appendRemark(b, `Cancellation approved${remarks ? ' - ' + remarks : ''}`);
+        moveBooking(t, b, 'cancelled', { handled_by: sid });
+        Object.assign(c, { status: 'approved', decided_by: sid, decided_at: nowIso(), change_fee_percent: 0, change_fee: 0, price_difference: 0, details: withRemarks }); t.dirty(K.CHANGES);
+        audit(t, 'Approved cancellation request', { booking: b, details: remarks || (from === 'confirmed' ? 'Confirmed down payment is non-refundable under standard policy' : '') });
+        return { n: notify(t, b, 'change_decision', { status: 'approved (booking cancelled)', amount: 0, remarks }), status: 'approved', due: 0 };
+        }
+        const [lo, hi] = feeRange();
+        if (!Number.isFinite(pct) || pct < lo || pct > hi) fail(`The change fee must be between ${lo}% and ${hi}%.`);
+        if (!Number.isFinite(diff)) fail('Enter a valid price difference.');
+        const oldTotal = num(b.total_amount); const fee = r2(oldTotal * pct / 100); const newTotal = r2(oldTotal + diff);
+        if (newTotal < 0) fail('The price difference would make the total negative.');
+        const rawItems = t.all(K.BOOKING_ITEMS).filter((i) => num(i.booking_id) === num(b.booking_id));
+        const holding = RESERVED.includes(from);
+        if (newDate) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate) || daysUntil(newDate) == null || daysUntil(newDate) < 1) fail('The new travel date must be from tomorrow onward.');
+        if (holding) releaseSlots(t, b);
+        rawItems.forEach((i) => { i.service_date = newDate; }); t.dirty(K.BOOKING_ITEMS);
+        const block = blockers(checkAvailability(t, itemsOf(t, b))); if (block.length) fail(blockText(block).replace('Cannot approve', 'Cannot apply'));
+        if (holding) reserveSlots(t, b);
+        }
+        if (diff !== 0 && rawItems[0]) { rawItems[0].subtotal = r2(Math.max(num(rawItems[0].subtotal) + diff, 0)); t.dirty(K.BOOKING_ITEMS); }
+        b.total_amount = newTotal;
+        if (from !== 'confirmed') b.deposit_amount = computeDeposit(itemsOf(t, b), newTotal); // after confirmation the down payment is already paid
+        appendRemark(b, `Change approved${remarks ? ' - ' + remarks : ''}`); b.handled_by = sid; b.updated_at = nowIso(); t.dirty(K.BOOKINGS);
+        Object.assign(c, { status: 'approved', decided_by: sid, decided_at: nowIso(), change_fee_percent: pct, change_fee: fee, price_difference: r2(diff), details: withRemarks }); t.dirty(K.CHANGES);
+        const due = r2(fee + Math.max(diff, 0));
+        audit(t, 'Approved change request', { booking: b, details: `Fee ${pct}% = ${peso(fee)}, price difference ${peso(diff)}, new total ${peso(newTotal)}${newDate ? ', new date ' + fmtDate(newDate) : ''}` });
+        return { n: notify(t, b, 'change_decision', { status: 'approved', amount: due, remarks }), status: 'approved', due };
+    }
+
+    function pageChangeList() {
+        const t = peek(); const sec = $('section.content-card'); const table = $('table', sec);
+        const list = t.all(K.CHANGES).map((c) => { const b = bookingOfChange(t, c); return b ? { c, b, cu: customerOf(t, b), st: changeStatus(c.status) } : null; }).filter(Boolean)
+        .sort((a, b) => (a.st === 'pending' ? 0 : 1) - (b.st === 'pending' ? 0 : 1) || (a.st === 'pending' ? String(a.c.requested_at).localeCompare(String(b.c.requested_at)) : String(b.c.requested_at).localeCompare(String(a.c.requested_at))));
+        const render = (f) => fillTable(table, list.filter((x) => (!f.status || x.st === f.status) && matches(`${x.b.booking_ref} ${x.cu.full_name}`, f.q)).map((x) =>
+        row([esc(x.b.booking_ref), esc(x.cu.full_name), esc(isCancelType(x.c.request_type) ? 'Cancellation' : 'Change'), esc(fmtDT(x.c.requested_at)), changePill(x.st), btn('A402review_change_request.html?id=' + x.c.change_id, x.st === 'pending' ? 'Review' : 'View')])), list.length ? 'No requests match the filters.' : 'No change or cancellation requests yet.');
+        const get = addFilters(sec, [{ id: 'status', label: 'Status', type: 'select', options: [['', 'All'], ['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected']] }, { id: 'q', label: 'Search', type: 'text', placeholder: 'Reference or customer' }], render);
+        render(get());
+    }
+
+    function pageReviewChange() {
+        const t = peek(); const c = t.all(K.CHANGES).find((x) => num(x.change_id) === num(queryParam('id')));
+        const b = c && bookingOfChange(t, c);
+        if (!b) return missing('That request could not be found. Open it from the change requests list.', 'A401change_requests_list.html');
+        const sm = summarize(t, b); const cancel = isCancelType(c.request_type); const st = changeStatus(c.status);
+        const ref = $('.reference'); if (ref) ref.textContent = sm.ref; setPill($('.status-pill'), sm.code, `Booking: ${statusLabel(sm.code)}`);
+        const ps = $$('main .content-card p');
+        const setStrong = (re, v) => { const p = ps.find((x) => re.test(x.textContent)); if (p) p.innerHTML = `<strong>${p.querySelector('strong').textContent}</strong> ${esc(v)}`; };
+        setStrong(/Request type/, cancel ? 'Cancellation' : 'Change request'); setStrong(/Requested at/, fmtDT(c.requested_at)); setStrong(/Customer request/, c.details || '—');
+        const guess = guessDate(c.details);
+        const body = $$('tbody tr'); const cur = [fmtDate(sm.travel_date), sm.services, routeOf(sm.items)]; const req = [guess ? fmtDate(guess) : cancel ? 'Cancel booking' : 'See customer request', 'See customer request', 'See customer request'];
+        body.forEach((tr, i) => { const td = tr.querySelectorAll('td'); if (td[1]) td[1].textContent = cur[i]; if (td[2]) td[2].textContent = req[i]; });
+        const form = $('form.demo-form'); const dec = field(form, 1); const rate = field(form, 2); const feeEl = field(form, 3); const diffEl = field(form, 4); const totEl = field(form, 5);
+        const [lo, hi] = feeRange();
+        rate.innerHTML = Array.from({ length: hi - lo + 1 }, (_, i) => `<option value="${lo + i}">${lo + i}%</option>`).join('');
+        dec.innerHTML = '<option value="approve">Approve</option><option value="reject">Reject</option>';
+        [feeEl, totEl].forEach((el) => { el.readOnly = true; }); diffEl.value = c.price_difference != null && num(c.price_difference) ? num(c.price_difference) : 0;
+        const oldTotal = num(b.total_amount);
+        const dateRow = document.createElement('div'); dateRow.style.display = 'contents';
+        dateRow.innerHTML = `<label for="field-newdate">New travel date (optional)</label><input id="field-newdate" type="date" value="${esc(guess && daysUntil(guess) >= 1 ? guess : '')}" min="${addDaysStr(1)}">`;
+        if (!cancel) field(form, 6).previousElementSibling.insertAdjacentElement('beforebegin', dateRow);
+        const recalc = () => { feeEl.value = r2(oldTotal * num(rate.value) / 100); totEl.value = r2(oldTotal + num(diffEl.value)); };
+        recalc(); rate.addEventListener('change', recalc); diffEl.addEventListener('input', recalc);
+        const fixed = () => { const off = cancel || dec.value === 'reject'; [rate, diffEl].forEach((el) => { el.disabled = off; }); const nd = $('#field-newdate'); if (nd) nd.disabled = off; };
+        dec.addEventListener('change', fixed); fixed();
+        if (cancel) form.insertAdjacentHTML('afterbegin', `<p class="hint">Cancellation request. Standard policy: a confirmed down payment is non-refundable. For a refund, use Company cancellation &amp; refund instead.</p>`);
+        if (st !== 'pending') { $$('input, select, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); form.insertAdjacentHTML('afterbegin', `<p class="hint">This request was already ${esc(st)}.</p>`); const rj = $('a[href="A403change_decision_saved.html"]', form); if (rj) rj.remove(); }
+        else if (TERMINAL.includes(sm.code)) form.insertAdjacentHTML('afterbegin', `<p class="hint">The booking is "${esc(statusLabel(sm.code))}", so it can only be rejected.</p>`);
+        const reject = $('a[href="A403change_decision_saved.html"]', form);
+        if (reject) onClick('a[href="A403change_decision_saved.html"]', () => { dec.value = 'reject'; fixed(); form.requestSubmit(); });
+        onSubmit(form, () => {
+        const nd = $('#field-newdate');
+        const out = run((tx) => decideChange(tx, c.change_id, { decision: dec.value, pct: num(rate.value), diff: num(diffEl.value), remarks: cleanMulti(field(form, 6).value, 600), newDate: nd && !nd.disabled ? nd.value : '' }));
+        flash(`Request ${out.status}. ${noticeText(out.n)}`); go('A403change_decision_saved.html?id=' + c.change_id);
+        });
+    }
+
+    function pageChangeSaved() {
+        const t = peek(); const c = t.all(K.CHANGES).find((x) => num(x.change_id) === num(queryParam('id'))); const b = c && bookingOfChange(t, c);
+        if (!b) return missing('That decision could not be found.', 'A401change_requests_list.html');
+        const st = changeStatus(c.status); setPill($('.status-pill'), st === 'approved' ? 'approved' : 'closed', st[0].toUpperCase() + st.slice(1));
+        replacePlaceholders({ '[reference id]': b.booking_ref });
+        const v = $('a[href="A201bookings_list.html"]'); if (v) { v.href = 'A202review_booking.html' + refQ(b.booking_ref); }
+        showFlash();
+    }
+
+    function pageChangeConfirmed() {
+        const t = peek(); const ref = queryParam('ref'); const b = ref && findBooking(t, ref);
+        if (!b) return missing('Open this page from a confirmed booking in the bookings list.', 'A201bookings_list.html');
+        const sm = summarize(t, b);
+        const pend = changesOf(t, b).filter((c) => changeStatus(c.status) === 'pending' && !isCancelType(c.request_type)).slice(-1)[0] || null;
+        replacePlaceholders({ '[reference id]': sm.ref }); setPill($('.status-pill'), sm.code);
+        const guess = pend ? guessDate(pend.details) : '';
+        $$('tbody tr').forEach((tr, i) => { const td = tr.querySelectorAll('td'); if (td[1]) td[1].textContent = [fmtDate(sm.travel_date), sm.services, routeOf(sm.items)][i]; if (td[2]) td[2].textContent = [guess ? fmtDate(guess) : 'See request', 'See request', 'See request'][i]; });
+        const form = $('form.demo-form'); const [lo, hi] = feeRange(); const oldTotal = sm.total; const paid = verifiedTotal(t, b);
+        const days = daysUntil(sm.travel_date);
+        const f = (n) => field(form, n); f(1).value = days == null ? '—' : `${days} day(s)`; f(2).value = peso(paid);
+        [f(1), f(2), f(3), f(5)].forEach((el) => { el.readOnly = true; }); f(4).type = 'number'; f(4).value = 0; f(4).step = '0.01';
+        f(3).insertAdjacentHTML('beforebegin', `<label for="field-rate">Change fee rate</label><select id="field-rate">${Array.from({ length: hi - lo + 1 }, (_, i) => `<option value="${lo + i}">${lo + i}%</option>`).join('')}</select>`);
+        const rate = $('#field-rate');
+        const recalc = () => { const fee = r2(oldTotal * num(rate.value) / 100); f(3).value = peso(fee); f(5).value = peso(fee + Math.max(num(f(4).value), 0)); };
+        recalc(); rate.addEventListener('change', recalc); f(4).addEventListener('input', recalc);
+        if (!pend) form.insertAdjacentHTML('afterbegin', '<p class="hint">There is no pending change request from the customer for this booking. Applying will record a staff-initiated change; describe it in the remarks.</p>');
+        if (sm.code !== 'confirmed') { $$('input, select, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); form.insertAdjacentHTML('afterbegin', `<p class="hint">Only confirmed bookings are changed here. This one is "${esc(statusLabel(sm.code))}".</p>`); }
+        onSubmit(form, () => {
+        const remarks = cleanMulti(f(6).value, 600);
+        if (!pend && remarks.length < 5) fail('Describe the change in the remarks (at least 5 characters).');
+        const out = run((tx) => {
+            let id = pend && pend.change_id;
+            if (!id) { const row_ = tx.insert(K.CHANGES, 'change_id', { booking_id: b.booking_id, decided_by: null, request_type: 'change', details: `Recorded by staff: ${remarks}`, change_fee_percent: 0, change_fee: 0, price_difference: 0, status: 'pending', requested_at: nowIso(), decided_at: null }); id = row_.change_id; }
+            return decideChange(tx, id, { decision: 'approve', pct: num(rate.value), diff: num(f(4).value), remarks, newDate: guess && daysUntil(guess) >= 1 ? guess : '' });
+        });
+        flash(`Change applied to ${sm.ref}. Amount due from the customer: ${peso(out.due)}. ${noticeText(out.n)}`); go('A401change_requests_list.html');
+        });
+    }
 })();
