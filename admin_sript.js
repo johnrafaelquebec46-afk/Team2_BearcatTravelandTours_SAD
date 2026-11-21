@@ -353,5 +353,127 @@
     const noticeText = (n) => (n ? `Customer notice recorded for ${n} channel${n > 1 ? 's' : ''} (email / SMS).` : 'No customer notice was recorded (email and SMS are switched off in settings, or the customer has no contact details).');
 
     //STAFF ACCOUNT AND SESSION
-    
+    const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || ''));
+    const roleOf = (r) => (/owner|manage/i.test(String(r || '')) ? 'owner' : 'staff');
+    const ROLE_LABEL = { staff: 'Company personnel', owner: 'Management / owner' };
+    function ensureStaff() {
+        if (readTable(K.STAFF).length) return;
+        run((t) => {
+        t.insert(K.STAFF, 'staff_id', { full_name: 'AJ Segovia Ragasa', email: 'owner@bearcat.com', password_hash: hashPassword('Owner@12345'), role: 'owner', is_active: true, contact_no: '' });
+        t.insert(K.STAFF, 'staff_id', { full_name: 'Sample Staff', email: 'staff@bearcat.com', password_hash: hashPassword('Staff@12345'), role: 'staff', is_active: true, contact_no: '' });
+        });
+    }
+    function session() { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch (_) { return null; } }
+    /** The signed-in staff row, re-read each time so deactivation or a role change takes effect straight away. */
+    function me() {
+        const s = session(); if (!s) return null;
+        const row = readTable(K.STAFF).find((x) => num(x.staff_id) === num(s.staff_id));
+        if (!row || !row.is_active) return null;
+        return Object.assign({}, row, { role: roleOf(row.role) });
+    }
+    const isOwner = () => !!me() && me().role === 'owner';
+    function requireOwner() { if (!isOwner()) fail('This action is for management / owner accounts only.'); }
+    function signOut() { try { sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(APP_ROLE_KEY); } catch (_) { /* ignore */ } }
+
+    //Page helpers
+    const formHandlers = new Map(); // form element -> handler(event, form)
+    const clickHandlers = []; // [selector, handler]
+    const onSubmit = (form, fn) => { if (form) formHandlers.set(form, guarded(fn)); };
+    const onClick = (selector, fn) => clickHandlers.push([selector, guarded(fn)]);
+    /** Capture-phase listeners on `document` run before the demo handlers app.js attached to the elements, and we stop those. */
+    document.addEventListener('submit', (e) => {
+        const h = formHandlers.get(e.target);
+        if (!h) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (typeof e.target.reportValidity === 'function' && !e.target.reportValidity()) return;
+        h(e, e.target);
+    }, true);
+    document.addEventListener('click', (e) => {
+        for (const [sel, fn] of clickHandlers) {
+        const el = e.target.closest(sel);
+        if (el) { e.preventDefault(); e.stopImmediatePropagation(); fn(e, el); return; }
+        }
+        const out = e.target.closest('a[href="A101staff_login.html"]');
+        if (out && ROLE !== 'access') signOut();
+    }, true);
+
+    const field = (form, n) => form.querySelector(`#field-${n}`);
+    const mainEl = () => document.querySelector('main');
+    const sectionByHeading = (re) => $$('section.content-card, section.surface, form.surface').find((s) => { const h = s.querySelector('h2'); return h && re.test(h.textContent); }) || null;
+
+    function tbodyOf(table) { return table.tBodies[0] || table.appendChild(document.createElement('tbody')); }
+    function fillTable(table, rowsHtml, emptyText) {
+        if (!table) return;
+        const cols = table.querySelectorAll('thead th').length || 1;
+        tbodyOf(table).innerHTML = rowsHtml.length ? rowsHtml.join('') : `<tr><td colspan="${cols}" class="muted">${esc(emptyText || 'No records yet.')}</td></tr>`;
+    }
+    const row = (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
+    const btn = (href, label, cls = 'button-soft') => `<a class="button ${cls}" href="${esc(href)}">${esc(label)}</a>`;
+    const refQ = (ref) => `?ref=${encodeURIComponent(ref)}`;
+
+    //replacement of placeholder texts on the HTML files.
+    function replacePlaceholders(map) {
+        const walker = document.createTreeWalker(mainEl(), NodeFilter.SHOW_TEXT);
+        const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.forEach((n) => { let v = n.nodeValue; Object.entries(map).forEach(([from, to]) => { if (v.includes(from)) v = v.split(from).join(to); }); if (v !== n.nodeValue) n.nodeValue = v; });
+    }
+    function missing(msg, backHref) {
+        const m = mainEl(); const hd = m.querySelector('.page-heading');
+        m.innerHTML = '';
+        if (hd) m.appendChild(hd);
+        m.insertAdjacentHTML('beforeend', `<div class="live-message" id="live-message" role="alert">${esc(msg)}</div><p><a class="button button-soft" href="${esc(backHref)}">Back</a></p>`);
+    }
+
+    //filter bar under section headings
+    function addFilters(section, defs, onChange) {
+        const bar = document.createElement('div');
+        bar.className = 'actions'; bar.style.cssText = 'display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin:.5rem 0 1rem';
+        bar.setAttribute('role', 'search');
+        bar.innerHTML = defs.map((d) => `<label style="display:grid;gap:.25rem;font-size:.9rem">${esc(d.label)}${d.type === 'select'
+        ? `<select data-f="${d.id}">${d.options.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`
+        : `<input data-f="${d.id}" type="search" placeholder="${esc(d.placeholder || '')}">`}</label>`).join('');
+        const h = section.querySelector('h2'); (h || section.firstChild).insertAdjacentElement('afterend', bar);
+        const get = () => Object.fromEntries($$('[data-f]', bar).map((el) => [el.dataset.f, el.value.trim()]));
+        bar.addEventListener('input', () => onChange(get())); bar.addEventListener('change', () => onChange(get()));
+        return get;
+    }
+    const matches = (hay, q) => !q || hay.toLowerCase().includes(q.toLowerCase());
+
+    function downloadCsv(filename, headers, rows) {
+        const cell = (v) => { let s = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+        const text = '﻿' + [headers, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
+        const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+        const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    //shared and consistent booking summary
+    const routeOf = (items) => items.map((i) => `${i.pickup_location || '—'} → ${i.destination || '—'}`).join('; ') || '—';
+    function fillSummary(t, sm) {
+        const b = sm.b;
+        const total = sm.total; const deposit = num(b.deposit_amount) > 0 ? num(b.deposit_amount) : computeDeposit(sm.items, total);
+        const dd = $$('.summary-list dd');
+        const vals = [
+        `${sm.customer.full_name} · ${sm.customer.email || 'no email'} · ${sm.customer.contact_no || 'no phone'}`,
+        sm.services, total > 0 ? peso(total) : 'To be quoted',
+        `${fmtDate(sm.travel_date)} · ${sm.pax} ${sm.pax === 1 ? 'person' : 'people'}`,
+        depositLabel(sm.items, total, deposit), total > 0 ? peso(deposit) : '—', routeOf(sm.items),
+        ];
+        dd.forEach((el, i) => { if (i < vals.length) el.textContent = vals[i]; });
+        const list = $('.summary-list');
+        if (list && b.remarks && !$('.js-remarks')) list.insertAdjacentHTML('afterend', `<p class="muted js-remarks"><strong>Trip details / notes:</strong> ${esc(b.remarks)}</p>`);
+        return deposit;
+    }
+    function fillHeader(sm) {
+        const ref = $('.reference'); if (ref) ref.textContent = sm.ref;
+        setPill($('.status-pill'), sm.code);
+        replacePlaceholders({ '[reference id]': sm.ref });
+    }
+    function availabilityHint(t, sm, anchor) {
+        const list = checkAvailability(t, sm.items); if (!list.length || !anchor) return;
+        const bad = blockers(list).length;
+        const el = document.createElement('p'); el.className = 'hint';
+        el.textContent = 'Availability: ' + list.map((a) => `${a.item.service_name} ${fmtDate(a.item.service_date)} - ${a.message}`).join('; ') + (bad ? ' (approval is blocked until this is resolved).' : '.');
+        anchor.insertAdjacentElement('beforebegin', el);
+    }
 })();
