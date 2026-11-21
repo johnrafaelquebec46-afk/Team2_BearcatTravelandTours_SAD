@@ -264,6 +264,7 @@
         return total > 0 ? `${Math.round((num(deposit) / total) * 100)}%` : '—';
     }
 
+    //BOOKING HANDLING AND AVAILABILITY CHECKS
     //availability
     const availRow = (t, serviceId, date) => t.all(K.AVAIL).find((a) => num(a.service_id) === num(serviceId) && a.service_date === date) || null;
     /** Dates without a row are "not managed" and never block approval. */
@@ -300,4 +301,57 @@
         t.dirty(K.AVAIL);
         });
     }
+
+    /** Move a booking along an allowed transition (NFR-07). `fields` are extra columns to set. */
+    function moveBooking(t, b, to, fields = {}) {
+        const from = normStatus(b.status);
+        if (!(ALLOWED[from] || []).includes(to)) fail(`A booking that is "${statusLabel(from)}" cannot be changed to "${statusLabel(to)}".`);
+        if (RESERVED.includes(from) && TERMINAL.includes(to)) releaseSlots(t, b);
+        b.status = to; b.updated_at = nowIso();
+        Object.assign(b, fields); t.dirty(K.BOOKINGS);
+    }
+    /** booking.remarks also holds the customer's trip details, so staff notes are appended, never overwritten. */
+    function appendRemark(b, text) {
+        const x = clean(text, 600); if (!x) return;
+        b.remarks = [b.remarks, `Staff (${me() ? me().full_name : 'staff'}): ${x}`].filter(Boolean).join(' | ');
+    }
+
+    // audit trail
+    function audit(t, action, { booking = null, reference = null, details = null } = {}) {
+        t.insert(K.AUDIT, 'log_id', { staff_id: me() ? me().staff_id : null, action, booking_id: booking ? booking.booking_id : null, reference: reference || (booking ? booking.booking_ref : null), details: details ? clean(details, 600) : null, created_at: nowIso() });
+    }
+    const TEMPLATE_LABELS = {
+        booking_approved: 'Booking approved', booking_confirmed: 'Booking confirmed', payment_not_verified: 'Payment not verified',
+        change_decision: 'Change request decision', cancellation_refund: 'Cancellation / refund', booking_closed: 'Booking closed', correction_requested: 'Correction requested',
+    };
+    const TEMPLATE_DEFAULTS = {
+        booking_approved: ['Your booking [Reference] is approved - please pay the down payment', 'Hello [Customer name],\n\nYour booking [Reference] for [Service] on [Travel date] has been approved.\n\nPlease pay the down payment of [Amount] and upload your proof of payment on or before [Deadline]. If payment is not received in time, the request expires and must be submitted again.\n\n[Remarks]\n\nThank you,\n[Business name]'],
+        booking_confirmed: ['Your booking [Reference] is confirmed', 'Hello [Customer name],\n\nWe have verified your payment. Your booking [Reference] for [Service] on [Travel date] is now Confirmed / Final.\n\n[Remarks]\n\nThank you,\n[Business name]'],
+        payment_not_verified: ['We could not verify your payment for [Reference]', 'Hello [Customer name],\n\nWe could not verify the payment submitted for booking [Reference].\n\nReason: [Remarks]\n\nIf you can still pay, please resubmit your payment and proof on or before [Deadline].\n\n[Business name]'],
+        change_decision: ['Update on your change / cancellation request for [Reference]', 'Hello [Customer name],\n\nYour request for booking [Reference] has been [Status].\n\nAmount to pay (change fee and any price difference): [Amount]\n\nStaff remarks: [Remarks]\n\n[Business name]'],
+        cancellation_refund: ['Booking [Reference] cancelled', 'Hello [Customer name],\n\nBooking [Reference] ([Service], [Travel date]) has been cancelled.\n\nDetails: [Remarks]\n\nRefund amount: [Amount]. We will contact you about the refund.\n\n[Business name]'],
+        booking_closed: ['Your booking request [Reference] was closed', 'Hello [Customer name],\n\nYour booking request [Reference] for [Service] has been closed.\n\nReason: [Remarks]\n\nYou are welcome to submit a new booking request at any time.\n\n[Business name]'],
+        correction_requested: ['Please correct your booking request [Reference]', 'Hello [Customer name],\n\nBefore we can approve booking [Reference], we need you to correct or complete some information.\n\nWhat to fix: [Remarks]\n\nPlease contact us or submit a new request with the corrected details.\n\n[Business name]'],
+    };
+    const templateOf = (t, type) => { const row = t.all(K.TEMPLATES).find((r) => r.template_type === type); const d = TEMPLATE_DEFAULTS[type] || ['Update on your booking [Reference]', 'Hello [Customer name], there is an update on booking [Reference]. [Remarks]']; return { subject: row ? row.subject : d[0], body: row ? row.body : d[1] }; };
+    const fillTpl = (text, vars) => String(text || '').replace(/\[([^\]]+)\]/g, (m, k) => (k in vars ? String(vars[k] == null ? '' : vars[k]) : m));
+    
+    //customer notice logging: no email/SMS gateways, rows stays 'queued'
+     function notify(t, b, type, extra = {}) {
+        const c = customerOf(t, b); const s = settings(); const sm = summarize(t, b); const tpl = templateOf(t, type);
+        const vars = {
+        'Customer name': c.full_name, Reference: b.booking_ref, Service: sm.services, 'Travel date': fmtDate(sm.travel_date), Amount: extra.amount != null ? peso(extra.amount) : '',
+        Deadline: fmtDT(extra.deadline || b.payment_due_by), Remarks: extra.remarks || '', Status: extra.status || '', 'Business name': s.business_name,
+        };
+        const subject = fillTpl(tpl.subject, vars); const message = fillTpl(tpl.body, vars).replace(/\n{3,}/g, '\n\n').trim();
+        const targets = [];
+        if (s.email_enabled === '1' && c.email) targets.push(['email', c.email]);
+        if (s.sms_enabled === '1' && c.contact_no) targets.push(['sms', c.contact_no]);
+        targets.forEach(([channel, recipient]) => t.insert(K.NOTICES, 'notification_id', { booking_id: b.booking_id, reference: b.booking_ref, recipient, channel, template_type: type, subject: channel === 'email' ? subject : null, message, status: 'queued', created_at: nowIso() }));
+        return targets.length;
+    }
+    const noticeText = (n) => (n ? `Customer notice recorded for ${n} channel${n > 1 ? 's' : ''} (email / SMS).` : 'No customer notice was recorded (email and SMS are switched off in settings, or the customer has no contact details).');
+
+    //STAFF ACCOUNT AND SESSION
+    
 })();
