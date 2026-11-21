@@ -476,4 +476,94 @@
         el.textContent = 'Availability: ' + list.map((a) => `${a.item.service_name} ${fmtDate(a.item.service_date)} - ${a.message}`).join('; ') + (bad ? ' (approval is blocked until this is resolved).' : '.');
         anchor.insertAdjacentElement('beforebegin', el);
     }
+
+    // Staff Account access
+    function pageLogin() {
+        if (me()) { go(roleOf(me().role) === 'owner' && sessionStorage.getItem(APP_ROLE_KEY) === 'owner' ? 'A104owner_dashboard.html' : 'A102staff_dashboard.html'); return; }
+        showFlash();
+        const form = $('#login-form');
+        const LOCK = 'bearcatAdminLock';
+        onSubmit(form, () => {
+        let lock = {}; try { lock = JSON.parse(localStorage.getItem(LOCK) || '{}'); } catch (_) { lock = {}; }
+        if (lock.until && lock.until > Date.now()) fail(`Too many failed attempts. Try again in ${Math.ceil((lock.until - Date.now()) / 60000)} minute(s).`);
+        const email = clean(field(form, 1).value, 120).toLowerCase(); const pw = field(form, 2).value; const want = $('#login-role').value === 'owner' ? 'owner' : 'staff';
+        const acct = readTable(K.STAFF).find((s) => String(s.email).toLowerCase() === email);
+        const ok = acct && acct.is_active && checkPassword(pw, acct.password_hash);
+        if (!ok) {
+            lock.count = (lock.count || 0) + 1; if (lock.count >= 5) { lock.until = Date.now() + 5 * 60000; lock.count = 0; }
+            try { localStorage.setItem(LOCK, JSON.stringify(lock)); } catch (_) { /* ignore */ }
+            fail(acct && !acct.is_active ? 'This account is deactivated. Please contact the owner.' : 'Incorrect email or password.');
+        }
+        if (want === 'owner' && roleOf(acct.role) !== 'owner') fail('This account is not a management / owner account. Choose "Company personnel".');
+        try { localStorage.removeItem(LOCK); } catch (_) { /* ignore */ }
+        try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ staff_id: acct.staff_id, at: Date.now() })); sessionStorage.setItem(APP_ROLE_KEY, want); } catch (_) { fail('Your browser is blocking session storage, so you cannot stay signed in.'); }
+        run((t) => audit(t, 'Signed in'));
+        go(want === 'owner' ? 'A104owner_dashboard.html' : 'A102staff_dashboard.html');
+        });
+        if (queryParam('seed') === 'demo') {
+        const done = seedDemo(queryParam('force') === '1');
+        announce(done ? 'Demo data loaded: sample customers, bookings, payments, change requests and refunds. Log in as owner@bearcat.com / Owner@12345 or staff@bearcat.com / Staff@12345.' : 'Demo data was not loaded because bookings already exist. Add &force=1 to the address to add it anyway.', !done);
+        }
+    }
+
+    function pageForgot() {
+        const form = $('form');
+        onSubmit(form, () => {
+        const email = clean(field(form, 1).value, 120).toLowerCase();
+        const acct = readTable(K.STAFF).find((s) => String(s.email).toLowerCase() === email && s.is_active);
+        let link = '';
+        if (acct) {
+            const token = newSalt() + newSalt();
+            run((t) => { t.all(K.RESETS).push({ email, token_hash: sha256(token), expires_at: new Date(Date.now() + 30 * 60000).toISOString(), used: false }); t.dirty(K.RESETS); });
+            link = `set_new_password.html?token=${token}&email=${encodeURIComponent(email)}`;
+        }
+        announce('If that email belongs to an active staff account, a reset link is created. This browser-only build cannot send email, so the link appears below.');
+        const old = $('#reset-link'); if (old) old.remove();
+        if (link) form.insertAdjacentHTML('afterend', `<p id="reset-link" class="surface content-card">Reset link (valid for 30 minutes): <a href="${esc(link)}">Open the reset page</a></p>`);
+        });
+    }
+
+    function pageSetNewPassword() {
+        const form = $('form'); const token = queryParam('token'); const email = (queryParam('email') || '').toLowerCase();
+        const valid = () => readTable(K.RESETS).find((r) => r.email === email && !r.used && token && r.token_hash === sha256(token) && new Date(r.expires_at).getTime() > Date.now());
+        if (!valid()) { announce('This reset link is invalid or has expired. Request a new one from the "Forgot password" page.', true); }
+        const login = $('a[href="staff_login.html"]'); if (login) login.href = 'A101staff_login.html';
+        onSubmit(form, () => {
+        const rec = valid(); if (!rec) fail('This reset link is invalid or has expired. Request a new one.');
+        const a = field(form, 1).value; const b = field(form, 2).value;
+        if (a.length < 8) fail('The password must be at least 8 characters.');
+        if (a !== b) fail('The two passwords do not match. Please re-enter them.');
+        run((t) => {
+            const acct = t.all(K.STAFF).find((s) => String(s.email).toLowerCase() === email); if (!acct) fail('Account not found.');
+            acct.password_hash = hashPassword(a); t.dirty(K.STAFF);
+            t.all(K.RESETS).forEach((r) => { if (r.email === email) r.used = true; }); t.dirty(K.RESETS);
+            t.insert(K.AUDIT, 'log_id', { staff_id: acct.staff_id, action: 'Password reset', booking_id: null, reference: null, details: null, created_at: nowIso() });
+        });
+        flash('Password updated. Please log in.'); go('A101staff_login.html');
+        });
+    }
+
+    function pageAccount() {
+        const form = $('form.demo-form'); const u = me();
+        field(form, 1).value = u.full_name; field(form, 2).value = u.email; field(form, 3).value = u.contact_no || '';
+        onSubmit(form, () => {
+        const name = clean(field(form, 1).value, 100); const email = clean(field(form, 2).value, 120).toLowerCase(); const phone = clean(field(form, 3).value, 20);
+        const cur = field(form, 4).value; const next = field(form, 5).value;
+        if (name.length < 2) fail('Enter your full name.');
+        if (!isEmail(email)) fail('Enter a valid email address.');
+        if (phone && !/^[0-9+()\-\s]{7,20}$/.test(phone)) fail('Enter a valid contact number.');
+        run((t) => {
+            const acct = t.all(K.STAFF).find((s) => num(s.staff_id) === num(u.staff_id));
+            if (t.all(K.STAFF).some((s) => num(s.staff_id) !== num(u.staff_id) && String(s.email).toLowerCase() === email)) fail('Another account already uses that email address.');
+            const emailChanged = email !== String(acct.email).toLowerCase();
+            if ((next || emailChanged) && !checkPassword(cur, acct.password_hash)) fail('Enter your current password to change your email or password.');
+            if (next) { if (next.length < 8) fail('The new password must be at least 8 characters.'); acct.password_hash = hashPassword(next); }
+            acct.full_name = name; acct.email = email; acct.contact_no = phone; t.dirty(K.STAFF);
+            audit(t, 'Updated own account', { details: next ? 'Password changed' : null });
+        });
+        field(form, 4).value = ''; field(form, 5).value = '';
+        announce('Your account was updated.');
+        });
+    }
+
 })();
