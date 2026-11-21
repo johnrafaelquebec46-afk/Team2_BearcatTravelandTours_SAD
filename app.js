@@ -128,9 +128,9 @@
       const services = BearcatStore.readTable(DB_KEYS.SERVICES);
       const query = BearcatIntegrity.sanitize(serviceLabelOrId, 100).toLowerCase();
       return (
+        services.find((s) => String(s.service_id) === query || s.service_name.toLowerCase() === query) ||
         services.find(
           (s) =>
-            String(s.service_id) === query ||
             s.service_name.toLowerCase().includes(query) ||
             s.service_type.toLowerCase().includes(query)
         ) || services[0]
@@ -533,6 +533,54 @@
 
   window.BearcatApiBridge = BearcatApiBridge;
 
+  // ---- NEW: customer pages read the service catalog the owner manages in the admin portal (btt_db_services) ----
+  (() => {
+    const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const all = BearcatStore.readTable(DB_KEYS.SERVICES);
+    const open = all.filter((s) => s.is_available !== false);
+    const isCustom = (s) => /custom/i.test(s.service_type || "");
+    const money = (n) => "\u20B1" + Number(n).toLocaleString("en-PH", { maximumFractionDigits: 2 });
+    const rateText = (s) => (Number(s.base_rate) > 0 ? `${money(s.base_rate)} ${s.rate_unit || ""}`.trim() : "Quoted per request");
+
+    // 1. Services page: one card per service
+    const grid = document.querySelector(".card-grid.three");
+    if (grid && grid.querySelector(".service-card")) {
+      grid.innerHTML = all.length ? all.map((s) => {
+        const on = s.is_available !== false;
+        const link = !on ? `<span class="hint">Currently unavailable</span>`
+          : isCustom(s) ? `<a class="button button-primary" href="booking_details.html">Start request</a>`
+          : `<a class="button button-primary" href="service_details.html">View &amp; book</a>`;
+        return `<article class="surface service-card" data-service-id="${esc(s.service_id)}"><h2>${esc(s.service_name)}</h2><p>${esc(s.description || s.service_type)}</p><dl class="spec-list"><div><dt>Rate</dt><dd>${esc(rateText(s))}</dd></div><div><dt>Deposit</dt><dd>${esc(s.deposit_percent)}%</dd></div><div><dt>Availability</dt><dd>${on ? "Available" : "Unavailable"}</dd></div></dl>${link}</article>`;
+      }).join("") : `<p class="muted">No services are available right now. Please check back soon.</p>`;
+    }
+
+    // 2. Service details page: the service chosen on the Services page (?service=name, set by the click handler below)
+    const detailPanel = document.querySelector(".review-grid .lavender-panel");
+    if (detailPanel) {
+      const wanted = (new URLSearchParams(window.location.search).get("service") || BearcatBookingFlow.readDraft()?.item?.service_label || "").trim().toLowerCase();
+      const svc = open.find((s) => s.service_name.toLowerCase() === wanted) || open.find((s) => s.service_name.toLowerCase().includes(wanted) && wanted) || open[0];
+      const card = document.querySelector(".review-grid .content-card");
+      if (svc && card) {
+        card.querySelector("h2").textContent = svc.service_name;
+        const pageTitle = document.querySelector("main .page-heading h1"); if (pageTitle) pageTitle.textContent = svc.service_name; // also keeps the "Check available dates" link carrying the right service
+        const p = card.querySelector("p:not(.eyebrow)"); if (p) p.textContent = svc.description || svc.service_type;
+        const dd = detailPanel.querySelectorAll("dd");
+        if (dd[0]) dd[0].textContent = rateText(svc);
+        if (dd[1]) dd[1].textContent = `${svc.deposit_percent}%`;
+        if (dd[2]) dd[2].textContent = "Available";
+        if (dd[3]) dd[3].textContent = svc.rate_unit === "per pax" ? "Rate is per traveler" : "Rate is per trip";
+      }
+    }
+
+    // 3. Service dropdowns on Booking request and Check availability
+    ["trip-service", "calendar-service"].forEach((id) => {
+      const sel = document.getElementById(id);
+      if (!sel || !open.length) return;
+      const first = sel.options[0] && sel.options[0].value === "" ? sel.options[0].outerHTML : '<option value="">Select service</option>';
+      sel.innerHTML = first + open.map((s) => `<option value="${esc(s.service_id)}">${esc(s.service_name)}</option>`).join("");
+    });
+  })();
+
   // Lock & pre-select chosen service when navigating from Services / Availability flow
   document.addEventListener(
     "click",
@@ -649,7 +697,10 @@
       if (["view & book", "start request", "check available dates", "check availability", "book now"].some((k) => label.includes(k))) {
         const pageContext = `${btn.closest("article, section")?.querySelector("h1, h2, h3")?.textContent || ""} ${document.querySelector("main h1, main h2")?.textContent || ""} ${window.location.pathname}`.toLowerCase();
         let chosen = "";
-        if (pageContext.includes("custom")) chosen = "custom";
+        // CHANGED: prefer the exact service name from the catalog (card heading or ?service=) over the old keyword guess
+        const cardHead = (btn.closest("article, section")?.querySelector("h1, h2, h3")?.textContent || new URLSearchParams(window.location.search).get("service") || "").trim().toLowerCase();
+        if (BearcatStore.readTable(DB_KEYS.SERVICES).some((s) => s.service_name.toLowerCase() === cardHead)) chosen = cardHead;
+        else if (pageContext.includes("custom")) chosen = "custom";
         else if (pageContext.includes("tour")) chosen = "tour";
         else if (pageContext.includes("package")) chosen = "package";
 
@@ -663,7 +714,9 @@
         const svcSelect = document.querySelector("select");
         if (svcSelect && svcSelect.value) {
           const valText = `${svcSelect.value} ${svcSelect.options[svcSelect.selectedIndex]?.text || ""}`.toLowerCase();
-          if (valText.includes("custom")) sessionStorage.setItem("bearcat_prefill_service", "custom");
+          const pickedName = (svcSelect.options[svcSelect.selectedIndex]?.text || "").trim().toLowerCase();
+          if (BearcatStore.readTable(DB_KEYS.SERVICES).some((s) => s.service_name.toLowerCase() === pickedName)) sessionStorage.setItem("bearcat_prefill_service", pickedName);
+          else if (valText.includes("custom")) sessionStorage.setItem("bearcat_prefill_service", "custom");
           else if (valText.includes("tour")) sessionStorage.setItem("bearcat_prefill_service", "tour");
           else if (valText.includes("package")) sessionStorage.setItem("bearcat_prefill_service", "package");
         }
@@ -710,7 +763,7 @@
     setTimeout(() => {
       const preService = sessionStorage.getItem("bearcat_prefill_service");
       if (preService && bookingServiceEl) {
-        const opt = [...bookingServiceEl.options].find((o) =>
+        const opt = [...bookingServiceEl.options].find((o) => o.text.trim().toLowerCase() === preService) || [...bookingServiceEl.options].find((o) =>
           `${o.value} ${o.text}`.toLowerCase().includes(preService)
         );
         if (opt) {
@@ -1260,6 +1313,50 @@
   window.BearcatClientAPI.BearcatPostBooking = BearcatPostBooking;
 
   document.querySelectorAll(".booking-reference, #booking-reference").forEach((node) => { node.textContent = readRef(); });
+  // NEW: fill the booking summary rows on the post-booking pages from the saved booking, so what staff set in the admin
+  // portal (approved total, down payment, deadline, change fee, refund) is what the customer sees.
+  (() => {
+    if (document.querySelector("[data-submit-booking]")) return; // the review page already uses the draft
+    const booking = BearcatStore.findBookingByRef(readRef());
+    if (!booking) return;
+    const rows = (key) => BearcatStore.readTable(key).filter((r) => Number(r.booking_id) === Number(booking.booking_id));
+    const items = rows(DB_KEYS.BOOKING_ITEMS);
+    const services = BearcatStore.readTable(DB_KEYS.SERVICES);
+    const names = [...new Set(items.map((i) => services.find((s) => Number(s.service_id) === Number(i.service_id))?.service_name).filter(Boolean))].join(", ");
+    const dates = items.map((i) => i.service_date).filter(Boolean).sort();
+    const fmtDay = (iso) => (iso ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${iso}T12:00:00`)) : "");
+    const php = (n) => `\u20B1${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const total = Number(booking.total_amount) || items.reduce((a, i) => a + (Number(i.subtotal) || 0), 0);
+    const deposit = Number(booking.deposit_amount) || 0;
+    const pays = rows(DB_KEYS.PAYMENTS);
+    const lastPay = pays[pays.length - 1];
+    const paidVerified = pays.filter((p) => String(p.payment_status).toLowerCase() === "verified").reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const approvedChange = rows(DB_KEYS.CHANGES).filter((c) => String(c.status).toLowerCase() === "approved").pop();
+    const refund = BearcatStore.readTable("btt_db_refunds").filter((r) => Number(r.booking_id) === Number(booking.booking_id)).pop();
+    const when = booking.payment_due_by ? new Date(booking.payment_due_by).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : "";
+    const values = {
+      "Service / travel date": names && dates[0] ? `${names} \u00B7 ${fmtDay(dates[0])}` : "",
+      "Service / date": names && dates[0] ? `${names} \u00B7 ${fmtDay(dates[0])}` : "",
+      "Service": names, "Travel date": fmtDay(dates[0]),
+      "Estimated total": total > 0 ? php(total) : "", "New total": total > 0 ? php(total) : "",
+      "Deposit rate": total > 0 && deposit > 0 ? `${Math.round((deposit / total) * 100)}%` : "",
+      "Down payment due": deposit > 0 ? php(deposit) : "", "Down payment": deposit > 0 ? php(deposit) : "", "Amount due": deposit > 0 ? php(deposit) : "",
+      "Deadline": when, "Payment deadline": when,
+      "Amount submitted": lastPay ? php(lastPay.amount) : "",
+      "Route": items.length ? items.map((i) => `${i.pickup_location || "\u2014"} \u2192 ${i.destination || "\u2014"}`).join("; ") : "",
+      "Travelers": items.length ? `${items.reduce((a, i) => a + (Number(i.pax_qty) || 0), 0)} people` : "",
+      "Payment received": paidVerified > 0 ? php(paidVerified) : "",
+      "Balance": total > 0 && paidVerified > 0 ? php(Math.max(total - paidVerified, 0)) : "",
+      "Change fee": approvedChange && Number(approvedChange.change_fee) > 0 ? php(approvedChange.change_fee) : "",
+      "Refund amount": refund ? php(refund.amount) : "",
+      "Refund status": refund ? ({ pending: "Pending owner approval", approved: "Approved - awaiting payout", paid: "Refunded", rejected: "Not approved" }[refund.status] || "") : ""
+    };
+    document.querySelectorAll("div, li, tr").forEach((row) => {
+      if (row.children.length !== 2) return;
+      const label = row.children[0].textContent.trim();
+      if (values[label]) row.children[1].textContent = values[label];
+    });
+  })();
 
   const page = document.body.dataset.page;
   const activeNav = new Map([
@@ -1800,13 +1897,38 @@
     const date = new Date(`${iso}T12:00:00`);
     return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date);
   };
+  // NEW: show what the owner set in the admin portal (A107) for the chosen service: seats left per day and in the side panel.
+  const adminDayInfo = (iso) => {
+    const id = document.getElementById("calendar-service")?.value || "";
+    if (!id) return null;
+    return BearcatStore.readTable("btt_db_availability").find((r) => r.service_date === iso && String(r.service_id) === id) || null;
+  };
+  const updateAvailabilitySummary = (iso) => {
+    const panel = document.querySelector(".availability-summary");
+    if (!panel) return;
+    const dds = panel.querySelectorAll("dd");
+    const pill = panel.querySelector(".status-pill");
+    const info = iso ? adminDayInfo(iso) : null;
+    if (dds[2]) dds[2].textContent = !iso ? "\u2014" : info ? `${info.available_slots} of ${info.max_capacity}` : "Confirmed by staff";
+    if (pill) {
+      const closed = info && (info.status !== "available" || Number(info.available_slots) <= 0);
+      pill.textContent = closed ? "Unavailable" : "Available";
+      pill.classList.toggle("status-error", !!closed);
+      pill.classList.toggle("status-available", !closed);
+    }
+  };
   const renderCalendar = (monthValue, initialSelected = "") => {
     if (!calendar || !monthValue || !/^\d{4}-\d{2}$/.test(monthValue)) return;
     const [year, month] = monthValue.split("-").map(Number);
     const today = localToday();
     const firstOffset = (new Date(year, month - 1, 1).getDay() + 6) % 7;
     const daysInMonth = new Date(year, month, 0).getDate();
-    const fullDays = new Set([5, 12, 13, 20, 27]);
+    // CHANGED: "FULL" now comes from the dates the owner closes in the admin portal (A107, table btt_db_availability).
+    // A date is FULL when it has availability rows and every one of them is unavailable / fully booked.
+    const adminRows = BearcatStore.readTable("btt_db_availability");
+    // When a service is chosen in the Service dropdown, only that service's rows count.
+    const pickedId = document.getElementById("calendar-service")?.value || "";
+    const isFullDate = (iso) => { const rows = adminRows.filter((r) => r.service_date === iso && (!pickedId || String(r.service_id) === pickedId)); return rows.length > 0 && rows.every((r) => r.status !== "available" || Number(r.available_slots) <= 0); };
     calendar.replaceChildren();
     for (let i = 0; i < firstOffset; i++) {
       const blank = document.createElement("span");
@@ -1817,24 +1939,28 @@
     for (let number = 1; number <= daysInMonth; number++) {
       const date = `${year}-${String(month).padStart(2, "0")}-${String(number).padStart(2, "0")}`;
       const isPast = date < today;
-      const isFull = fullDays.has(number);
+      const isFull = isFullDate(date);
       const isSelected = date === initialSelected && !isFull && !isPast;
+      const info = isPast ? null : adminDayInfo(date);
+      const baseLabel = isFull ? (info && info.status === "unavailable" ? "CLOSED" : "FULL") : info ? `${info.available_slots} LEFT` : "OPEN";
       const button = document.createElement("button");
       button.type = "button";
       button.className = `calendar-day ${isPast ? "past" : isFull ? "full" : "open"}${isSelected ? " is-selected" : ""}`;
       button.dataset.calendarDay = String(number);
       button.dataset.calendarDate = date;
       button.dataset.availability = isPast ? "past" : isFull ? "full" : "open";
+      button.dataset.baseLabel = baseLabel;
       button.setAttribute("aria-pressed", String(isSelected));
-      button.setAttribute("aria-label", `Day ${number}, ${isPast ? "PAST, unavailable" : isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}`);
+      button.setAttribute("aria-label", `Day ${number}, ${isPast ? "PAST, unavailable" : isFull ? baseLabel : isSelected ? "SELECTED" : baseLabel}`);
       button.disabled = isFull || isPast;
       if (button.disabled) button.setAttribute("aria-disabled", "true");
-      button.innerHTML = `<span>${number}</span><small>${isPast ? "PAST" : isFull ? "FULL" : isSelected ? "SELECTED" : "OPEN"}</small>`;
+      button.innerHTML = `<span>${number}</span><small>${isPast ? "PAST" : isFull ? baseLabel : isSelected ? "SELECTED" : baseLabel}</small>`;
       calendar.append(button);
     }
-    const validSelected = initialSelected >= today && !fullDays.has(Number(initialSelected.slice(-2)));
+    const validSelected = initialSelected >= today && !isFullDate(initialSelected);
     if (selectedDateInput) selectedDateInput.value = validSelected ? initialSelected : "";
     if (selectedDateDisplay) selectedDateDisplay.textContent = formatCalendarDate(validSelected ? initialSelected : "");
+    updateAvailabilitySummary(validSelected ? initialSelected : "");
   };
 
   if (monthInput && calendar) {
@@ -1845,6 +1971,7 @@
     if (/^\d{4}-\d{2}-\d{2}$/.test(savedDate) && savedDate >= localToday()) monthInput.value = savedDate.slice(0, 7);
     if (monthInput.value < currentMonth) monthInput.value = currentMonth;
     renderCalendar(monthInput.value, savedDate >= localToday() ? savedDate : "");
+    document.getElementById("calendar-service")?.addEventListener("change", () => renderCalendar(monthInput.value, selectedDateInput?.value || ""));
     monthInput.addEventListener("change", () => {
       if (monthInput.value < localToday().slice(0, 7)) monthInput.value = localToday().slice(0, 7);
       try { sessionStorage.removeItem(TRIP_DATE_KEY); } catch (_) { }
@@ -1858,10 +1985,10 @@
     calendar.querySelectorAll("[data-calendar-day]").forEach((button) => {
       button.classList.remove("is-selected");
       button.setAttribute("aria-pressed", "false");
-      if (!button.disabled) {
+       if (!button.disabled) {
         const label = button.querySelector("small");
-        if (label) label.textContent = "OPEN";
-        button.setAttribute("aria-label", `Day ${button.dataset.calendarDay}, OPEN`);
+        if (label) label.textContent = button.dataset.baseLabel || "OPEN";
+        button.setAttribute("aria-label", `Day ${button.dataset.calendarDay}, ${button.dataset.baseLabel || "OPEN"}`);
       }
     });
     day.classList.add("is-selected");
@@ -1871,6 +1998,7 @@
     day.setAttribute("aria-label", `Day ${day.dataset.calendarDay}, SELECTED`);
     if (selectedDateInput) selectedDateInput.value = day.dataset.calendarDate;
     if (selectedDateDisplay) selectedDateDisplay.textContent = formatCalendarDate(day.dataset.calendarDate);
+    updateAvailabilitySummary(day.dataset.calendarDate);
   });
 
   if (page === "status-timeline") {
@@ -1971,22 +2099,22 @@
   } catch (_) { }
 
   //header navigation links
-  if (pageRole === "staff" && currentRole === "owner") {
-    const ownerLinks = [["owner_dashboard.html", "Dashboard"], ["all_company_bookings.html", "Bookings"], ["payments_list.html", "Payments"], ["change_requests_list.html", "Change requests"], ["review_release_refunds.html", "Refunds"], ["manage_services_rates.html", "Services & rates"], ["booking_payment_reports.html", "Reports"], ["manage_staff_accounts.html", "Staff"], ["business_system_settings.html", "Settings"]];
-    const nav = document.getElementById("primary-nav");
-    if (nav) {
-      nav.setAttribute("aria-label", "Owner navigation");
-      nav.innerHTML = ownerLinks.map(([href, label]) => `<a href="${href}">${label.replace("&", "&amp;")}</a>`).join("");
-    }
-    const ownerBadge = document.querySelector(".portal-badge");
-    if (ownerBadge) { ownerBadge.textContent = "OWNER"; ownerBadge.setAttribute("href", "owner_dashboard.html"); }
-    document.querySelectorAll('a[href="A102staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
-  }
-  if (pageRole === "staff" || pageRole === "owner") {
-    document.querySelectorAll("#primary-nav a").forEach((link) => {
-      if (link.getAttribute("href") === currentFile) link.setAttribute("aria-current", "page");
-    });
-  }
+  //if (pageRole === "staff" && currentRole === "owner") {
+    //const ownerLinks = [["owner_dashboard.html", "Dashboard"], ["all_company_bookings.html", "Bookings"], ["payments_list.html", "Payments"], ["change_requests_list.html", "Change requests"], ["review_release_refunds.html", "Refunds"], ["manage_services_rates.html", "Services & rates"], ["booking_payment_reports.html", "Reports"], ["manage_staff_accounts.html", "Staff"], ["business_system_settings.html", "Settings"]];
+    //const nav = document.getElementById("primary-nav");
+    //if (nav) {
+      //nav.setAttribute("aria-label", "Owner navigation");
+     //nav.innerHTML = ownerLinks.map(([href, label]) => `<a href="${href}">${label.replace("&", "&amp;")}</a>`).join("");
+    //}
+    //const ownerBadge = document.querySelector(".portal-badge");
+    //if (ownerBadge) { ownerBadge.textContent = "OWNER"; ownerBadge.setAttribute("href", "owner_dashboard.html"); }
+    //document.querySelectorAll('a[href="A102staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
+  //}
+  //if (pageRole === "staff" || pageRole === "owner") {
+    //document.querySelectorAll("#primary-nav a").forEach((link) => {
+     // if (link.getAttribute("href") === currentFile) link.setAttribute("aria-current", "page");
+    //});
+  //}
 
   // ---- "Edit" buttons fill the form beside the table ----
   document.querySelectorAll("[data-edit-row]").forEach((link) => {
