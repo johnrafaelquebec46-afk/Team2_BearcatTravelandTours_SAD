@@ -771,4 +771,119 @@
         <h2>Refunds</h2>${tbl(['Amount', 'Status', 'Reason'], refs.map((r) => row([esc(peso(r.amount)), esc(r.status), esc(r.reason || '—')])), 'No refunds.')}</section>`;
         if (mgmt) mgmt.insertAdjacentHTML('afterend', html);
     }
+
+    //PAYMENTS VERIFICATION
+    function pagePaymentsList() {
+        const t = peek(); const sec = $('section.content-card'); const table = $('table', sec);
+        const pays = t.all(K.PAYMENTS).map((p) => { const b = t.all(K.BOOKINGS).find((x) => num(x.booking_id) === num(p.booking_id)); return b ? { p, b, c: customerOf(t, b) } : null; }).filter(Boolean)
+        .sort((x, y) => (normPay(x.p.payment_status) === 'submitted' ? 0 : 1) - (normPay(y.p.payment_status) === 'submitted' ? 0 : 1) || String(y.p.paid_at).localeCompare(String(x.p.paid_at)));
+        const render = (f) => {
+        const list = pays.filter(({ p, b, c }) => (!f.status || normPay(p.payment_status) === f.status) && matches(`${b.booking_ref} ${c.full_name} ${p.method}`, f.q));
+        fillTable(table, list.map(({ p, b, c }) => { const st = normPay(p.payment_status); const m = splitMethod(p.method);
+            return row([esc(b.booking_ref), esc(c.full_name), esc(peso(p.amount)), esc(m.name), payPill(st), btn(`A302verify_payment.html${refQ(b.booking_ref)}&pay=${p.payment_id}`, st === 'submitted' ? 'Verify' : 'View')]); }), pays.length ? 'No payments match the filters.' : 'No payments have been submitted yet.');
+        };
+        const get = addFilters(sec, [{ id: 'status', label: 'Status', type: 'select', options: [['', 'All'], ['submitted', PAY.submitted], ['verified', PAY.verified], ['not_verified', PAY.not_verified]] }, { id: 'q', label: 'Search', type: 'text', placeholder: 'Reference, customer or method' }], render);
+        render(get());
+    }
+
+    function paymentContext() {
+        const t = peek(); const b = bookingByQuery(t);
+        if (!b) return { err: 'That payment could not be found. Open it from the payments list.' };
+        const pid = num(queryParam('pay'));
+        const mine = paymentsOf(t, b);
+        const p = (pid && mine.find((x) => num(x.payment_id) === pid)) || [...mine].reverse().find((x) => normPay(x.payment_status) === 'submitted') || mine.slice(-1)[0];
+        if (!p) return { err: 'No payment has been submitted for this booking yet.' };
+        return { t, b, p, sm: summarize(t, b) };
+    }
+
+    function pageVerifyPayment() {
+        const ctx = paymentContext(); if (ctx.err) return missing(ctx.err, 'A301payments_list.html');
+        const { t, b, p, sm } = ctx; const st = normPay(p.payment_status); const m = splitMethod(p.method);
+        const ref = $('.reference'); if (ref) ref.textContent = sm.ref; setPill($('.status-pill'), sm.code, `${statusLabel(sm.code)} · payment ${PAY[st].toLowerCase()}`);
+        const due = num(b.deposit_amount) > 0 ? num(b.deposit_amount) : computeDeposit(sm.items, sm.total);
+        const late = b.payment_due_by && p.paid_at && new Date(p.paid_at).getTime() > new Date(b.payment_due_by).getTime();
+        const cells = $$('tbody tr td:nth-child(2)');
+        const vals = [peso(due), peso(p.amount), m.name, m.ref || '—', `${fmtDT(p.paid_at)} / deadline ${fmtDT(b.payment_due_by)}${late ? ' (paid after the deadline)' : ''}`, p.proof_file ? `Uploaded file: ${p.proof_file} (the customer site stores only the file name, so the image cannot be previewed here)` : 'No proof file recorded'];
+        cells.forEach((c, i) => { if (vals[i] != null) c.textContent = vals[i]; });
+        const form = $('form.demo-form'); const nv = $('a[href="A303payment_not_verified_staff.html"]', form);
+        if (nv) nv.href = `A303payment_not_verified_staff.html${refQ(sm.ref)}&pay=${p.payment_id}`;
+        if (st !== 'submitted' || sm.code !== 'payment_submitted') {
+        $$('input, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); if (nv) nv.remove();
+        form.insertAdjacentHTML('afterbegin', `<p class="hint">This payment is ${esc(PAY[st].toLowerCase())} and the booking is "${esc(statusLabel(sm.code))}", so there is nothing left to verify.</p>`);
+        }
+        onSubmit(form, () => {
+        const n = run((tx) => {
+            const bk = findBooking(tx, sm.ref); const pay = tx.all(K.PAYMENTS).find((x) => num(x.payment_id) === num(p.payment_id));
+            if (normPay(pay.payment_status) !== 'submitted') fail('This payment was already handled.');
+            if (normStatus(bk.status) !== 'payment_submitted') fail(`The booking is "${statusLabel(normStatus(bk.status))}", so it cannot be confirmed.`);
+            const need = num(bk.deposit_amount) > 0 ? num(bk.deposit_amount) : computeDeposit(itemsOf(tx, bk), num(bk.total_amount));
+            if (verifiedTotal(tx, bk) + num(pay.amount) + 0.009 < need) fail(`The amount paid (${peso(pay.amount)}) is less than the down payment (${peso(need)}). Use "Not verified" so the customer can resubmit.`);
+            pay.payment_status = 'verified'; pay.verified_by = me().staff_id; pay.verified_at = nowIso(); tx.dirty(K.PAYMENTS);
+            moveBooking(tx, bk, 'confirmed', { handled_by: me().staff_id });
+            audit(tx, 'Verified payment and confirmed booking', { booking: bk, details: `${peso(pay.amount)} via ${pay.method}` });
+            return notify(tx, bk, 'booking_confirmed', { remarks: '' });
+        });
+        flash(`Payment verified. Booking ${sm.ref} is now Confirmed. ${noticeText(n)}`); go('A301payments_list.html');
+        });
+    }
+
+    function pagePaymentNotVerified() {
+        const ctx = paymentContext(); if (ctx.err) return missing(ctx.err, 'A301payments_list.html');
+        const { b, p, sm } = ctx; const m = splitMethod(p.method);
+        const due = num(b.deposit_amount) > 0 ? num(b.deposit_amount) : computeDeposit(sm.items, sm.total);
+        replacePlaceholders({ '[reference id]': ' ' + sm.ref });
+        const form = $('form.demo-form');
+        [[1, peso(due)], [2, peso(p.amount)], [3, m.ref || m.name]].forEach(([n, v]) => { const el = field(form, n); el.value = v; el.readOnly = true; });
+        field(form, 4).innerHTML = ['Wrong amount', 'Unreadable proof', 'Reference not found', 'Paid after the deadline', 'Other'].map((x) => `<option>${esc(x)}</option>`).join('');
+        const back = $('a[href="A302verify_payment.html"]', form); if (back) back.href = `A302verify_payment.html${refQ(sm.ref)}&pay=${p.payment_id}`;
+        if (normPay(p.payment_status) !== 'submitted' || sm.code !== 'payment_submitted') { $$('select, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); form.insertAdjacentHTML('afterbegin', '<p class="hint">This payment was already handled, so it cannot be marked again.</p>'); }
+        onSubmit(form, () => {
+        const reason = field(form, 4).value; const outcome = field(form, 5).selectedIndex === 1 ? 'close' : 'resubmit'; const remarks = cleanMulti(field(form, 6).value, 600);
+        if (reason === 'Other' && remarks.length < 3) fail('Describe the reason in the remarks.');
+        const text = [reason, remarks].filter(Boolean).join('. ');
+        const n = run((tx) => {
+            const bk = findBooking(tx, sm.ref); const pay = tx.all(K.PAYMENTS).find((x) => num(x.payment_id) === num(p.payment_id));
+            if (normPay(pay.payment_status) !== 'submitted' || normStatus(bk.status) !== 'payment_submitted') fail('This payment was already handled.');
+            pay.payment_status = 'not_verified'; pay.verified_by = me().staff_id; pay.verified_at = nowIso(); tx.dirty(K.PAYMENTS);
+            if (outcome === 'close') {
+            appendRemark(bk, `Payment not verified - ${text}`); moveBooking(tx, bk, 'closed', { handled_by: me().staff_id });
+            audit(tx, 'Marked payment not verified and closed booking', { booking: bk, details: text });
+            return notify(tx, bk, 'booking_closed', { remarks: `Payment could not be verified: ${text}` });
+            }
+            const due2 = new Date(Date.now() + (num(settings().payment_deadline_hours) || 1) * 3600000).toISOString();
+            moveBooking(tx, bk, 'approved', { handled_by: me().staff_id, payment_due_by: due2 });
+            audit(tx, 'Marked payment not verified (resubmit)', { booking: bk, details: text });
+            return notify(tx, bk, 'payment_not_verified', { remarks: text, deadline: due2 });
+        });
+        flash(`Payment marked not verified for ${sm.ref}. ${noticeText(n)}`); go('A301payments_list.html');
+        });
+    }
+
+    function pageExpiredPayments() {
+        const t = peek(); const sums = allSummaries(t).filter((s) => isOverdue(s.b)).sort((a, b) => String(a.b.payment_due_by).localeCompare(String(b.b.payment_due_by)));
+        const table = $('table'); const sel = sums.find((s) => s.ref === queryParam('ref')) || null;
+        fillTable(table, sums.map((s) => row([esc(s.ref), `${esc(s.customer.full_name)} · ${esc(s.services)}`, esc(fmtDT(s.b.payment_due_by)), esc(peso(s.b.deposit_amount)), pill('approved') + ' <span class="hint">past deadline</span>', btn('A305expired_payments.html' + refQ(s.ref), 'Select')])), 'No approved bookings are past their payment deadline.');
+        const panel = sectionByHeading(/Selected booking/i); const form = $('form.demo-form');
+        const ps = $$('p', panel);
+        const setP = (i, label, v) => { if (ps[i]) ps[i].innerHTML = `<strong>${label}</strong> ${esc(v)}`; };
+        setP(0, 'Reference:', sel ? sel.ref : 'Select a booking from the table'); setP(1, 'Approved at:', sel ? fmtDT(sel.b.approved_at) : '—'); setP(2, 'Deadline:', sel ? fmtDT(sel.b.payment_due_by) : '—');
+        const dt = field(form, 2); dt.value = toLocalInput(new Date(Date.now() + (num(settings().extension_hours) || 1) * 3600000));
+        if (!sel) { $$('select, input, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); return; }
+        onSubmit(form, () => {
+        const extend = field(form, 1).selectedIndex === 1; const remarks = cleanMulti(field(form, 3).value, 600);
+        const n = run((tx) => {
+            const bk = findBooking(tx, sel.ref);
+            if (!isOverdue(bk)) fail('This booking is no longer past its deadline.');
+            if (extend) {
+            const when = new Date(field(form, 2).value); if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) fail('Choose a new deadline that is in the future.');
+            bk.payment_due_by = when.toISOString(); bk.updated_at = nowIso(); bk.handled_by = me().staff_id; tx.dirty(K.BOOKINGS);
+            if (remarks) appendRemark(bk, `Deadline extended - ${remarks}`);
+            audit(tx, 'Extended payment deadline', { booking: bk, details: `New deadline ${fmtDT(bk.payment_due_by)}` });
+            return notify(tx, bk, 'booking_approved', { amount: bk.deposit_amount, deadline: bk.payment_due_by, remarks: remarks || 'Your payment deadline was extended.' });
+            }
+            return closeBooking(tx, bk, 'The down payment was not received before the deadline', remarks, 'expired');
+        });
+        flash(`${extend ? 'Deadline extended' : 'Booking closed as expired'} for ${sel.ref}. ${noticeText(n)}`); go('A305expired_payments.html');
+        });
+    }
 })();
