@@ -1027,4 +1027,89 @@
         flash(`Change applied to ${sm.ref}. Amount due from the customer: ${peso(out.due)}. ${noticeText(out.n)}`); go('A401change_requests_list.html');
         });
     }
+
+    //REFUNDS
+    const REFUND_LABEL = { pending: 'Pending approval', approved: 'Approved - awaiting payout', paid: 'Paid', rejected: 'Rejected' };
+    const refundPill = (s) => `<span class="status-pill ${s === 'paid' ? 'status-approved' : s === 'rejected' ? 'status-error' : 'status-pending'}">${esc(REFUND_LABEL[s] || s)}</span>`;
+
+    function pageCompanyCancel() {
+        const t = peek(); const ref = queryParam('ref'); const b = ref && findBooking(t, ref);
+        if (!b) return missing('Open this page from a booking to cancel it.', 'A201bookings_list.html');
+        const sm = summarize(t, b); const paid = verifiedTotal(t, b);
+        replacePlaceholders({ '[reference id]': ' ' + sm.ref }); setPill($('.status-pill'), sm.code);
+        const form = $('form.demo-form'); const f = (n) => field(form, n);
+        f(1).value = sm.customer.full_name; f(2).value = `${sm.services} · ${fmtDate(sm.travel_date)}`; f(3).value = peso(sm.total); f(4).value = peso(paid);
+        [f(1), f(2), f(3), f(4)].forEach((el) => { el.readOnly = true; });
+        f(6).value = settings().cancellation_refund_policy === 'Full refund' ? paid : 0; f(6).max = paid; f(6).min = 0; f(6).step = '0.01';
+        const hint = $('.hint', form); if (hint) hint.textContent = `Refund policy: ${settings().cancellation_refund_policy}. The refund cannot exceed the verified down payment (${peso(paid)}). Owner approval is required before it is paid out.`;
+        if (TERMINAL.includes(sm.code)) { $$('input, select, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); form.insertAdjacentHTML('afterbegin', `<p class="hint">This booking is already "${esc(statusLabel(sm.code))}".</p>`); }
+        const back = $('a[href="A401change_requests_list.html"]', form); if (back) back.href = 'A205booking_details_owner.html' + refQ(sm.ref);
+        onSubmit(form, () => {
+        const reason = cleanMulti(f(5).value, 600); const amt = r2(f(6).value === '' ? 0 : num(f(6).value)); const method = f(7).value;
+        if (reason.length < 5) fail('Enter the cancellation reason (at least 5 characters).');
+        if (amt < 0) fail('The refund amount cannot be negative.');
+        const n = run((tx) => {
+            const bk = findBooking(tx, sm.ref); const verified = verifiedTotal(tx, bk);
+            if (amt > verified + 0.009) fail(`The refund (${peso(amt)}) cannot be more than the verified payments (${peso(verified)}).`);
+            appendRemark(bk, `Cancelled by company - ${reason}`); moveBooking(tx, bk, 'cancelled', { handled_by: me().staff_id });
+            if (amt > 0) tx.insert(K.REFUNDS, 'refund_id', { booking_id: bk.booking_id, amount: amt, method, reason, status: 'pending', reference_no: null, owner_remarks: null, requested_by: me().staff_id, decided_by: null, created_at: nowIso(), decided_at: null, paid_at: null });
+            audit(tx, 'Cancelled booking (company)', { booking: bk, details: `${reason}${amt > 0 ? ` | refund ${peso(amt)} pending approval` : ' | no refund'}` });
+            return notify(tx, bk, 'cancellation_refund', { amount: amt, remarks: reason });
+        });
+        flash(`Booking ${sm.ref} was cancelled${amt > 0 ? ' and a refund is waiting for owner approval' : ''}. ${noticeText(n)}`); go('A504refunds_register.html');
+        });
+    }
+
+    function refundRows(t) {
+        return t.all(K.REFUNDS).map((r) => { const b = t.all(K.BOOKINGS).find((x) => num(x.booking_id) === num(r.booking_id)); return b ? { r, b, cu: customerOf(t, b) } : null; }).filter(Boolean)
+        .sort((a, b) => String(b.r.created_at).localeCompare(String(a.r.created_at)));
+    }
+    function pageRefundRegister() {
+        const t = peek(); const sec = $('section.content-card'); const table = $('table', sec); const rows = refundRows(t); const owner = isOwner();
+        const render = (f) => fillTable(table, rows.filter((x) => (!f.status || x.r.status === f.status) && matches(`${x.b.booking_ref} ${x.cu.full_name}`, f.q)).map((x) =>
+        row([esc(x.b.booking_ref), esc(x.cu.full_name), esc(x.r.reason || '—'), esc(peso(x.r.amount)), refundPill(x.r.status), ['pending', 'approved'].includes(x.r.status) ? (owner ? btn('A501review_release_refunds.html?refund=' + x.r.refund_id, x.r.status === 'pending' ? 'Review' : 'Record payout') : '<span class="hint">Awaiting owner action</span>') : '<span class="hint">—</span>'])), rows.length ? 'No refunds match the filters.' : 'No refunds recorded yet.');
+        const get = addFilters(sec, [{ id: 'status', label: 'Status', type: 'select', options: [['', 'All'], ...Object.entries(REFUND_LABEL)] }, { id: 'q', label: 'Search', type: 'text', placeholder: 'Reference or customer' }], render);
+        render(get());
+    }
+
+    function pageReleaseRefunds() {
+        const t = peek(); const open_ = refundRows(t).filter((x) => ['pending', 'approved'].includes(x.r.status));
+        const sel = open_.find((x) => num(x.r.refund_id) === num(queryParam('refund'))) || null;
+        const table = $('table'); const th = $('thead tr', table); if (th && th.children.length === 5) th.insertAdjacentHTML('beforeend', '<th scope="col">Action</th>');
+        fillTable(table, open_.map((x) => row([esc(x.b.booking_ref), esc(x.cu.full_name), esc(x.r.reason || '—'), esc(peso(x.r.amount)), refundPill(x.r.status), btn('A501review_release_refunds.html?refund=' + x.r.refund_id, 'Select')])), 'No refunds are waiting for action.');
+        const form = $('form.demo-form'); const f = (n) => field(form, n);
+        const sp = $('p', form); if (sp) sp.innerHTML = `<strong>Selected reference:</strong> ${esc(sel ? sel.b.booking_ref : 'Select a refund from the table')}`;
+        f(3).insertAdjacentHTML('beforeend', '<option>Reject refund</option>');
+        if (!sel) { $$('input, select, textarea, button', form).forEach((el) => { el.disabled = true; }); return; }
+        f(1).value = num(sel.r.amount); f(1).step = '0.01'; f(1).min = '0.01';
+        const m = [...f(2).options].find((o) => o.text === sel.r.method); if (m) f(2).value = m.value;
+        f(4).value = sel.r.reference_no || ''; f(5).value = sel.r.owner_remarks || '';
+        onSubmit(form, (e) => {
+        const label = (e.submitter && e.submitter.textContent || '').toLowerCase();
+        const act = /paid/.test(label) ? 'paid' : /reject/.test(f(3).value.toLowerCase()) ? 'rejected' : 'approved';
+        const amt = r2(f(1).value); const remarks = cleanMulti(f(5).value, 600); const refNo = clean(f(4).value, 100);
+        if (act !== 'rejected' && !(amt > 0)) fail('Enter a refund amount greater than zero.');
+        if (act === 'rejected' && remarks.length < 3) fail('Enter the reason for rejecting this refund.');
+        if (act === 'paid' && refNo.length < 3) fail('Enter the transaction / receipt reference for the payout.');
+        run((tx) => {
+            requireOwner();
+            const r = tx.all(K.REFUNDS).find((x) => num(x.refund_id) === num(sel.r.refund_id)); const bk = tx.all(K.BOOKINGS).find((x) => num(x.booking_id) === num(r.booking_id));
+            if (!['pending', 'approved'].includes(r.status)) fail('This refund was already settled.');
+            if (act !== 'rejected' && amt > verifiedTotal(tx, bk) + 0.009) fail(`The refund (${peso(amt)}) cannot be more than the verified payments (${peso(verifiedTotal(tx, bk))}).`);
+            Object.assign(r, { status: act, decided_by: me().staff_id, decided_at: r.decided_at || nowIso(), owner_remarks: remarks || null, reference_no: refNo || r.reference_no });
+            if (act !== 'rejected') { r.amount = amt; r.method = f(2).value; }
+            if (act === 'paid') r.paid_at = nowIso();
+            tx.dirty(K.REFUNDS);
+            audit(tx, act === 'paid' ? 'Recorded refund payout' : act === 'approved' ? 'Approved refund' : 'Rejected refund', { booking: bk, details: `${peso(r.amount)}${refNo ? ' ref ' + refNo : ''}${remarks ? ' - ' + remarks : ''}` });
+        });
+        go('A502refund_recorded.html?refund=' + sel.r.refund_id);
+        });
+    }
+
+    function pageRefundRecorded() {
+        const t = peek(); const r = t.all(K.REFUNDS).find((x) => num(x.refund_id) === num(queryParam('refund'))); const b = r && t.all(K.BOOKINGS).find((x) => num(x.booking_id) === num(r.booking_id));
+        if (!b) return missing('That refund record could not be found.', 'A504refunds_register.html');
+        replacePlaceholders({ '[reference id]': b.booking_ref });
+        const p = $('.status-pill'); if (p) { p.textContent = REFUND_LABEL[r.status] || r.status; p.classList.toggle('status-approved', r.status !== 'rejected'); p.classList.toggle('status-error', r.status === 'rejected'); }
+    }
 })();
