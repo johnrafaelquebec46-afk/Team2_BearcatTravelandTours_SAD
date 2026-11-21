@@ -1971,22 +1971,22 @@
   } catch (_) { }
 
   //header navigation links
-  if (pageRole === "staff" && currentRole === "owner") {
-    const ownerLinks = [["owner_dashboard.html", "Dashboard"], ["all_company_bookings.html", "Bookings"], ["payments_list.html", "Payments"], ["change_requests_list.html", "Change requests"], ["review_release_refunds.html", "Refunds"], ["manage_services_rates.html", "Services & rates"], ["booking_payment_reports.html", "Reports"], ["manage_staff_accounts.html", "Staff"], ["business_system_settings.html", "Settings"]];
-    const nav = document.getElementById("primary-nav");
-    if (nav) {
-      nav.setAttribute("aria-label", "Owner navigation");
-      nav.innerHTML = ownerLinks.map(([href, label]) => `<a href="${href}">${label.replace("&", "&amp;")}</a>`).join("");
-    }
-    const ownerBadge = document.querySelector(".portal-badge");
-    if (ownerBadge) { ownerBadge.textContent = "OWNER"; ownerBadge.setAttribute("href", "owner_dashboard.html"); }
-    document.querySelectorAll('a[href="A102staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
-  }
-  if (pageRole === "staff" || pageRole === "owner") {
-    document.querySelectorAll("#primary-nav a").forEach((link) => {
-      if (link.getAttribute("href") === currentFile) link.setAttribute("aria-current", "page");
-    });
-  }
+  //if (pageRole === "staff" && currentRole === "owner") {
+    //const ownerLinks = [["owner_dashboard.html", "Dashboard"], ["all_company_bookings.html", "Bookings"], ["payments_list.html", "Payments"], ["change_requests_list.html", "Change requests"], ["review_release_refunds.html", "Refunds"], ["manage_services_rates.html", "Services & rates"], ["booking_payment_reports.html", "Reports"], ["manage_staff_accounts.html", "Staff"], ["business_system_settings.html", "Settings"]];
+    //const nav = document.getElementById("primary-nav");
+    //if (nav) {
+      //nav.setAttribute("aria-label", "Owner navigation");
+     //nav.innerHTML = ownerLinks.map(([href, label]) => `<a href="${href}">${label.replace("&", "&amp;")}</a>`).join("");
+    //}
+    //const ownerBadge = document.querySelector(".portal-badge");
+    //if (ownerBadge) { ownerBadge.textContent = "OWNER"; ownerBadge.setAttribute("href", "owner_dashboard.html"); }
+    //document.querySelectorAll('a[href="A102staff_dashboard.html"]').forEach((link) => link.setAttribute("href", "owner_dashboard.html"));
+  //}
+  //if (pageRole === "staff" || pageRole === "owner") {
+    //document.querySelectorAll("#primary-nav a").forEach((link) => {
+     // if (link.getAttribute("href") === currentFile) link.setAttribute("aria-current", "page");
+    //});
+  //}
 
   // ---- "Edit" buttons fill the form beside the table ----
   document.querySelectorAll("[data-edit-row]").forEach((link) => {

@@ -204,6 +204,9 @@ textarea {
   gap: 1.25rem;
   align-items: stretch
 }
+#login_hero {
+
+}
 
 .hero-copy {
   background: var(--blush)
