@@ -1112,4 +1112,321 @@
         replacePlaceholders({ '[reference id]': b.booking_ref });
         const p = $('.status-pill'); if (p) { p.textContent = REFUND_LABEL[r.status] || r.status; p.classList.toggle('status-approved', r.status !== 'rejected'); p.classList.toggle('status-error', r.status === 'rejected'); }
     }
+    
+    //HTML PAGES
+    //CATALOG, AVAILABILITY, STAFF, and SETTINGS, TEMPLATES - owner exclusive
+    function pageAvailability() {
+        const t = peek(); const form = $('form.demo-form'); const f = (n) => field(form, n);
+        const svcs = t.all(K.SERVICES);
+        f(1).innerHTML = svcs.map((s) => `<option value="${s.service_id}">${esc(s.service_name)}</option>`).join('');
+        f(2).min = localDate(); f(3).min = '0'; f(4).min = '0';
+        const STATUSES = [['available', 'Available'], ['unavailable', 'Unavailable'], ['fully_booked', 'Fully booked']];
+        f(5).innerHTML = STATUSES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+        form.insertAdjacentHTML('afterend', `<section class="surface content-card" id="avail-list"><h2>Saved dates</h2><div class="table-wrap"><table><thead><tr><th scope="col">Service</th><th scope="col">Date</th><th scope="col">Capacity</th><th scope="col">Open slots</th><th scope="col">Availability</th><th scope="col">Action</th></tr></thead></table></div></section>`);
+        const draw = () => {
+        const tx = peek(); const list = tx.all(K.AVAIL).slice().sort((a, b) => String(a.service_date).localeCompare(String(b.service_date)) || num(a.service_id) - num(b.service_id));
+        fillTable($('#avail-list table'), list.map((a) => { const s = serviceOf(tx, a.service_id); return row([esc(s ? s.service_name : 'Unknown'), esc(fmtDate(a.service_date)), esc(a.max_capacity), esc(a.available_slots), esc((STATUSES.find((x) => x[0] === a.status) || [0, a.status])[1]), `<button class="button button-soft" type="button" data-av-edit="${a.availability_id}">Edit</button> <button class="button button-soft" type="button" data-av-del="${a.availability_id}">Remove</button>`]); }), 'No dates are managed yet. A date with no entry never blocks a booking.');
+        };
+        draw();
+        onClick('[data-av-edit]', (e, el) => { const a = peek().all(K.AVAIL).find((x) => num(x.availability_id) === num(el.dataset.avEdit)); if (!a) return; f(1).value = a.service_id; f(2).value = a.service_date; f(3).value = a.max_capacity; f(4).value = a.available_slots; f(5).value = a.status; f(6).value = a.notes || ''; f(2).focus(); announce('Editing the selected date. Change the fields and save.'); });
+        onClick('[data-av-del]', (e, el) => {
+        const id = num(el.dataset.avDel);
+        run((tx) => { const a = tx.all(K.AVAIL).find((x) => num(x.availability_id) === id); if (!a) return; if (num(a.max_capacity) !== num(a.available_slots)) fail('Seats on this date are already reserved by bookings, so it cannot be removed. Mark it Unavailable instead.'); tx.all(K.AVAIL).splice(tx.all(K.AVAIL).indexOf(a), 1); tx.dirty(K.AVAIL); audit(tx, 'Removed date availability', { details: `${a.service_date}` }); });
+        draw(); announce('The date was removed.');
+        });
+        onSubmit(form, () => {
+        const sid = num(f(1).value); const date = f(2).value; const cap = Math.floor(num(f(3).value)); let slots = Math.floor(num(f(4).value)); let st = f(5).value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail('Choose a travel date.');
+        if (date < localDate()) fail('The travel date cannot be in the past.');
+        if (cap < 0 || slots < 0) fail('Capacity and slots cannot be negative.');
+        if (slots > cap) fail('Available slots cannot be more than the maximum capacity.');
+        if (st === 'available' && slots === 0) fail('A date with no slots left must be marked "Fully booked".');
+        if (st === 'fully_booked') slots = 0;
+        run((tx) => {
+            if (!serviceOf(tx, sid)) fail('Choose a service.');
+            const existing = availRow(tx, sid, date);
+            const data = { service_id: sid, service_date: date, max_capacity: cap, available_slots: slots, status: st, notes: cleanMulti(f(6).value, 300) };
+            if (existing) Object.assign(existing, data); else tx.insert(K.AVAIL, 'availability_id', data);
+            tx.dirty(K.AVAIL); audit(tx, existing ? 'Updated date availability' : 'Added date availability', { details: `${serviceOf(tx, sid).service_name} ${date}: ${slots}/${cap} ${st}` });
+        });
+        draw(); announce('Availability saved. New bookings for this date are checked against it when staff approve them.');
+        });
+    }
+
+    function pageServices() {
+        const form = $('#service-form'); const f = (n) => field(form, n); let editing = null;
+        const table = $('table'); const check = $('input[type="checkbox"]', form);
+        const types = [...new Set(['Tour Package', 'Van Rental', 'Custom Itinerary', ...readTable(K.SERVICES).map((s) => s.service_type)])];
+        f(1).innerHTML = types.map((x) => `<option>${esc(x)}</option>`).join('');
+        const sync = (el, v) => { const o = [...el.options].find((x) => x.text === String(v)); if (o) el.value = o.value; };
+        const draw = () => {
+        const list = readTable(K.SERVICES);
+        fillTable(table, list.map((s) => row([esc(s.service_name), esc(s.service_type), esc(num(s.base_rate) ? peso(s.base_rate) : 'Quoted per request'), esc(s.rate_unit), esc(`${s.deposit_percent}%`), esc(s.is_available === false ? 'No' : 'Yes'), `<button class="button button-soft" type="button" data-svc="${s.service_id}">Edit</button>`])), 'No services yet.');
+        };
+        draw();
+        onClick('[data-svc]', (e, el) => {
+        const s = readTable(K.SERVICES).find((x) => num(x.service_id) === num(el.dataset.svc)); if (!s) return; editing = s.service_id;
+        sync(f(1), s.service_type); f(2).value = s.service_name; f(3).value = s.description || ''; f(4).value = num(s.base_rate); sync(f(5), s.rate_unit); sync(f(6), `${s.deposit_percent}%`); check.checked = s.is_available !== false;
+        f(2).focus(); announce(`Editing ${s.service_name}. New rates apply to new bookings only; existing bookings keep the price they were quoted.`);
+        });
+        form.addEventListener('reset', () => { editing = null; });
+        onSubmit(form, () => {
+        const name = clean(f(2).value, 100); const rate = f(4).value === '' ? 0 : num(f(4).value); const pct = parseInt(f(6).value || f(6).selectedOptions[0].text, 10) || 30;
+        if (name.length < 3) fail('Enter a service name (at least 3 characters).');
+        if (rate < 0 || rate > 10000000) fail('Enter a valid base rate.');
+        if (!isCustomType(f(1).value) && !(rate > 0)) fail('Enter a base rate greater than zero (only custom services can be quoted per request).');
+        run((tx) => {
+            requireOwner();
+            const rows = tx.all(K.SERVICES);
+            if (rows.some((s) => num(s.service_id) !== num(editing) && String(s.service_name).toLowerCase() === name.toLowerCase())) fail('A service with that name already exists.');
+            const data = { service_type: f(1).value, service_name: name, description: cleanMulti(f(3).value, 800), base_rate: r2(rate), rate_unit: f(5).selectedOptions[0].text, deposit_percent: pct, is_available: check.checked };
+            const ex = editing != null && rows.find((s) => num(s.service_id) === num(editing));
+            if (ex) Object.assign(ex, data); else tx.insert(K.SERVICES, 'service_id', data);
+            tx.dirty(K.SERVICES); audit(tx, ex ? 'Updated service' : 'Added service', { details: `${name} ${peso(rate)} ${data.rate_unit}, deposit ${pct}%, ${data.is_available ? 'available' : 'unavailable'}` });
+        });
+        editing = null; form.reset(); check.checked = true; draw(); announce('Service saved.');
+        });
+    }
+
+    function pageStaffAccounts() {
+        const form = $('#staff-form'); const f = (n) => field(form, n); const check = $('input[type="checkbox"]', form); let editing = null;
+        const table = $('table');
+        const draw = () => { const tx = peek(); fillTable(table, tx.all(K.STAFF).map((s) => row([esc(s.full_name), esc(s.email), esc(ROLE_LABEL[roleOf(s.role)]), esc(s.is_active ? 'Yes' : 'No'), `<button class="button button-soft" type="button" data-staff="${s.staff_id}">Edit</button>`])), 'No staff accounts.'); };
+        draw();
+        onClick('[data-staff]', (e, el) => {
+        const s = readTable(K.STAFF).find((x) => num(x.staff_id) === num(el.dataset.staff)); if (!s) return; editing = s.staff_id;
+        f(1).value = s.full_name; f(2).value = s.email; f(3).value = ''; f(3).required = false; f(3).placeholder = 'Leave blank to keep the current password'; f(4).selectedIndex = roleOf(s.role) === 'owner' ? 1 : 0; check.checked = !!s.is_active;
+        f(1).focus(); announce(`Editing ${s.full_name}. Change the fields and save.`);
+        });
+        form.addEventListener('reset', () => { editing = null; f(3).required = true; f(3).placeholder = 'Temporary password'; });
+        onSubmit(form, () => {
+        const name = clean(f(1).value, 100); const email = clean(f(2).value, 120).toLowerCase(); const pw = f(3).value; const role = f(4).selectedIndex === 1 ? 'owner' : 'staff'; const active = check.checked;
+        if (name.length < 2) fail('Enter the full name.'); if (!isEmail(email)) fail('Enter a valid email address.');
+        if (editing == null && pw.length < 8) fail('The temporary password must be at least 8 characters.');
+        if (pw && pw.length < 8) fail('The password must be at least 8 characters.');
+        run((tx) => {
+            requireOwner();
+            const rows = tx.all(K.STAFF);
+            if (rows.some((s) => num(s.staff_id) !== num(editing) && String(s.email).toLowerCase() === email)) fail('Another account already uses that email address.');
+            const ex = editing != null && rows.find((s) => num(s.staff_id) === num(editing));
+            if (ex) {
+            const owners = rows.filter((s) => s.is_active && roleOf(s.role) === 'owner');
+            if (num(ex.staff_id) === num(me().staff_id) && (!active || role !== 'owner')) fail('You cannot deactivate or demote your own account. Ask another owner to do it.');
+            if (roleOf(ex.role) === 'owner' && ex.is_active && (!active || role !== 'owner') && owners.length <= 1) fail('At least one active owner account must remain.');
+            Object.assign(ex, { full_name: name, email, role, is_active: active }); if (pw) ex.password_hash = hashPassword(pw);
+            } else tx.insert(K.STAFF, 'staff_id', { full_name: name, email, password_hash: hashPassword(pw), role, is_active: active, contact_no: '' });
+            tx.dirty(K.STAFF); audit(tx, ex ? 'Updated staff account' : 'Created staff account', { details: `${name} (${email}), ${ROLE_LABEL[role]}, ${active ? 'active' : 'deactivated'}${pw ? ', password set' : ''}` });
+        });
+        editing = null; form.reset(); check.checked = true; draw(); announce('Account saved. Deactivated accounts cannot log in; their past work stays on record.');
+        });
+    }
+
+    function pageBusinessSettings() {
+        const form = $('form.demo-form'); const f = (n) => field(form, n); const s = settings(); const [c1, c2] = $$('input[type="checkbox"]', form);
+        f(1).value = s.business_name; f(2).value = s.business_email; f(3).value = s.business_contact; f(4).value = s.business_address; f(6).value = s.date_format; c1.checked = s.email_enabled === '1'; c2.checked = s.sms_enabled === '1';
+        onSubmit(form, () => {
+        const name = clean(f(1).value, 100); const email = clean(f(2).value, 120); if (name.length < 2) fail('Enter the business name.'); if (email && !isEmail(email)) fail('Enter a valid business email.');
+        run((tx) => { requireOwner(); saveSettings(tx, { business_name: name, business_email: email, business_contact: clean(f(3).value, 30), business_address: clean(f(4).value, 200), currency: 'PHP', date_format: f(6).value, email_enabled: c1.checked ? '1' : '0', sms_enabled: c2.checked ? '1' : '0' }); audit(tx, 'Updated business settings'); });
+        announce('Settings saved.');
+        });
+    }
+
+    function pagePolicies() {
+        const form = $('form.demo-form'); const f = (n) => field(form, n); const s = settings();
+        const sync = (el, v) => { const o = [...el.options].find((x) => x.text === String(v)); if (o) el.value = o.value; };
+        sync(f(1), `${s.deposit_default}%`); f(2).value = s.payment_deadline_hours; f(2).step = '0.25'; f(3).value = s.change_fee_min; f(4).value = s.change_fee_max; sync(f(5), s.cancellation_refund_policy); sync(f(6), s.late_payment_policy); f(7).value = s.extension_hours; f(7).step = '0.25'; f(8).value = s.policy_notes;
+        onSubmit(form, () => {
+        const dl = num(f(2).value); const lo = num(f(3).value); const hi = num(f(4).value); const ext = num(f(7).value);
+        if (!(dl >= 0.25 && dl <= 72)) fail('The payment deadline must be between 0.25 and 72 hours.');
+        if (lo < 0 || hi > 100 || lo > hi) fail('The change fee range must be between 0% and 100%, with the minimum not above the maximum.');
+        if (!(ext > 0 && ext <= 72)) fail('The extension must be between 0.25 and 72 hours.');
+        run((tx) => { requireOwner(); saveSettings(tx, { deposit_default: parseInt(f(1).selectedOptions[0].text, 10), payment_deadline_hours: dl, change_fee_min: lo, change_fee_max: hi, cancellation_refund_policy: f(5).selectedOptions[0].text, late_payment_policy: f(6).selectedOptions[0].text, extension_hours: ext, policy_notes: cleanMulti(f(8).value, 1000) }); audit(tx, 'Updated deposit and change policies', { details: `Deposit ${parseInt(f(1).selectedOptions[0].text, 10)}%, deadline ${dl}h, change fee ${lo}-${hi}%` }); });
+        announce('Policy saved. It applies to new approvals and decisions from now on.');
+        });
+    }
+
+    const PLACEHOLDERS = ['Customer name', 'Reference', 'Service', 'Travel date', 'Amount', 'Deadline', 'Remarks', 'Status', 'Business name'];
+    function pageTemplates() {
+        const form = $('form.demo-form'); const f = (n) => field(form, n);
+        f(1).innerHTML = Object.entries(TEMPLATE_LABELS).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+        const hint = $('.hint', form); if (hint) hint.textContent = 'Placeholders you can use: ' + PLACEHOLDERS.map((p) => `[${p}]`).join(' ');
+        const load = () => { const tpl = templateOf(peek(), f(1).value); f(2).value = tpl.subject; f(3).value = tpl.body; };
+        load(); f(1).addEventListener('change', load);
+        const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'button button-soft'; reset.textContent = 'Restore default'; reset.dataset.tplReset = '1';
+        $('.form-actions', form).appendChild(reset);
+        onClick('[data-tpl-reset]', () => { const d = TEMPLATE_DEFAULTS[f(1).value]; if (d) { f(2).value = d[0]; f(3).value = d[1]; announce('Default text restored in the form. Save to apply it.'); } });
+        onSubmit(form, () => {
+        const subject = clean(f(2).value, 200); const body = cleanMulti(f(3).value, 3000);
+        if (subject.length < 3 || body.length < 10) fail('Enter a subject and a message of at least 10 characters.');
+        const bad = [...new Set([...(subject + ' ' + body).matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]).filter((p) => !PLACEHOLDERS.includes(p)))];
+        if (bad.length) fail(`Unknown placeholder(s): ${bad.map((p) => `[${p}]`).join(', ')}. Use only: ${PLACEHOLDERS.map((p) => `[${p}]`).join(' ')}`);
+        run((tx) => {
+            requireOwner(); const rows = tx.all(K.TEMPLATES); const ex = rows.find((r) => r.template_type === f(1).value);
+            if (ex) Object.assign(ex, { subject, body, updated_by: me().staff_id, updated_at: nowIso() }); else rows.push({ template_type: f(1).value, subject, body, updated_by: me().staff_id, updated_at: nowIso() });
+            tx.dirty(K.TEMPLATES); audit(tx, 'Updated notification template', { details: TEMPLATE_LABELS[f(1).value] });
+        });
+        announce('Template saved. It is used for the next notice of this type.');
+        });
+    }
+
+    //LOGS/AUDITS
+    function pageAudit() {
+        const t = peek(); const sec = $('section.content-card'); const table = $('table', sec);
+        const rows = t.all(K.AUDIT).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 1000);
+        const users = [['', 'All users'], ...t.all(K.STAFF).map((s) => [String(s.staff_id), s.full_name])];
+        const render = (f) => fillTable(table, rows.filter((a) => (!f.user || String(a.staff_id) === f.user) && matches(`${a.action} ${a.reference || ''} ${a.details || ''}`, f.q)).map((a) => row([esc(fmtDT(a.created_at)), esc(staffName(t, a.staff_id) || 'System / unknown'), esc(a.action), esc(a.reference || '—'), esc(a.details || '—'), a.reference ? btn('A205booking_details_owner.html' + refQ(a.reference), 'View') : '<span class="hint">—</span>'])), rows.length ? 'No records match the filters.' : 'No actions have been recorded yet.');
+        const get = addFilters(sec, [{ id: 'user', label: 'User', type: 'select', options: users }, { id: 'q', label: 'Search', type: 'text', placeholder: 'Action, reference or details' }], render);
+        const pre = queryParam('ref'); if (pre) { $('[data-f="q"]', sec).value = pre; }
+        render(get());
+    }
+    function pageMyActivity() {
+        const t = peek(); const u = me();
+        const rows = t.all(K.AUDIT).filter((a) => num(a.staff_id) === num(u.staff_id)).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 100);
+        fillTable($('table'), rows.map((a) => row([esc(fmtDT(a.created_at)), esc(a.action), esc(a.reference || '—'), esc(a.details || '—')])), 'You have not recorded any actions yet.');
+    }
+    function pageNotifications() {
+        const t = peek(); const sec = $('section.content-card'); const table = $('table', sec);
+        const rows = t.all(K.NOTICES).slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 500);
+        const render = (f) => fillTable(table, rows.filter((n) => (!f.channel || n.channel === f.channel) && matches(`${n.reference} ${n.recipient} ${n.subject || ''} ${n.message}`, f.q)).map((n) => row([esc(fmtDT(n.created_at)), esc(n.reference || '—'), esc(n.recipient), esc(n.channel.toUpperCase()), `${esc(TEMPLATE_LABELS[n.template_type] || n.template_type)}<details><summary>View message</summary><pre style="white-space:pre-wrap;font:inherit">${esc((n.subject ? n.subject + '\n\n' : '') + n.message)}</pre></details>`, `<span class="status-pill status-pending">${esc(n.status === 'queued' ? 'Queued (not sent)' : n.status)}</span>`])), rows.length ? 'No notifications match the filters.' : 'No customer notices have been recorded yet.');
+        const get = addFilters(sec, [{ id: 'channel', label: 'Channel', type: 'select', options: [['', 'All'], ['email', 'Email'], ['sms', 'SMS']] }, { id: 'q', label: 'Search', type: 'text', placeholder: 'Reference, recipient or text' }], render);
+        sec.insertAdjacentHTML('beforeend', '<p class="hint">This build has no email or SMS gateway, so notices are recorded here as "Queued". Connect a sender to deliver them.</p>');
+        render(get());
+    }
+
+    //Reports
+    const REPORT_KEY = 'bearcatReportParams';
+    const REPORT_TYPES = ['Bookings & payments', 'Bookings by status', 'Payment records', 'Changes & cancellations'];
+    const inRange = (iso, from, to) => { if (!iso) return false; const d = localDate(new Date(iso)); return (!from || d >= from) && (!to || d <= to); };
+    function buildReport(p) {
+        const t = peek(); const sums = allSummaries(t).filter((s) => inRange(s.b.created_at, p.from, p.to));
+        const pays = t.all(K.PAYMENTS).filter((x) => inRange(x.paid_at, p.from, p.to));
+        const chg = t.all(K.CHANGES).filter((x) => inRange(x.requested_at, p.from, p.to));
+        const refunds = t.all(K.REFUNDS).filter((x) => inRange(x.created_at, p.from, p.to));
+        const verified = pays.filter((x) => normPay(x.payment_status) === 'verified');
+        const refOf = (id) => (t.all(K.BOOKINGS).find((b) => num(b.booking_id) === num(id)) || {}).booking_ref || '—';
+        let detail;
+        if (p.type === REPORT_TYPES[1]) detail = { title: 'Bookings', headers: ['Reference', 'Customer', 'Service', 'Total', 'Status'], rows: sums.map((s) => [s.ref, s.customer.full_name, s.services, peso(s.total), statusLabel(s.code)]) };
+        else if (p.type === REPORT_TYPES[3]) detail = { title: 'Changes and cancellations', headers: ['Reference', 'Type', 'Requested', 'Status', 'Fee'], rows: chg.map((c) => [refOf(c.booking_id), isCancelType(c.request_type) ? 'Cancellation' : 'Change', fmtDT(c.requested_at), changeStatus(c.status), num(c.change_fee) ? peso(c.change_fee) : '—']) };
+        else detail = { title: 'Payment records', headers: ['Reference', 'Method', 'Amount', 'Status'], rows: pays.map((x) => [refOf(x.booking_id), splitMethod(x.method).name, peso(x.amount), PAY[normPay(x.payment_status)]]) };
+        return {
+        p, count: sums.length, detail,
+        stats: [['Total bookings', String(sums.length)], ['Confirmed', String(sums.filter((s) => s.code === 'confirmed').length)], ['Payments verified', `${verified.length} (${peso(verified.reduce((a, x) => a + num(x.amount), 0))})`], ['Changes / cancellations', String(chg.length)]],
+        byStatus: Object.entries(STATUS).map(([c, l]) => [l, sums.filter((s) => s.code === c).length]),
+        metrics: [['Total bookings', String(sums.length)], ['Confirmed bookings', String(sums.filter((s) => s.code === 'confirmed').length)], ['Payments verified', `${verified.length} (${peso(verified.reduce((a, x) => a + num(x.amount), 0))})`], ['Pending refunds', String(refunds.filter((x) => ['pending', 'approved'].includes(x.status)).length)]],
+        };
+    }
+    const readParams = () => { try { const p = JSON.parse(sessionStorage.getItem(REPORT_KEY) || 'null'); if (p && p.from !== undefined) return p; } catch (_) { /* ignore */ } return { from: localDate(new Date(new Date().getFullYear(), 0, 1)), to: localDate(), type: REPORT_TYPES[0] }; };
+
+    function pageReports() {
+        const form = $('form.demo-form'); const f = (n) => field(form, n); const p0 = readParams();
+        f(1).value = p0.from; f(2).value = p0.to; f(3).value = p0.type;
+        const params = () => { const p = { from: f(1).value, to: f(2).value, type: f(3).value }; if (p.from && p.to && p.from > p.to) fail('"Date from" cannot be after "Date to".'); try { sessionStorage.setItem(REPORT_KEY, JSON.stringify(p)); } catch (_) { /* ignore */ } return p; };
+        const draw = (p) => {
+        const r = buildReport(p); const vals = $$('.stats-grid .stat-value'); r.stats.forEach(([, v], i) => { if (vals[i]) vals[i].textContent = v; });
+        const secs = $$('.card-grid.two section'); fillTable($('table', secs[0]), r.byStatus.map(([l, n]) => row([esc(l), esc(n)])), '');
+        const h = $('h2', secs[1]); if (h) h.textContent = r.detail.title; const tb = $('table', secs[1]); $('thead tr', tb).innerHTML = r.detail.headers.map((x) => `<th scope="col">${esc(x)}</th>`).join('');
+        fillTable(tb, r.detail.rows.slice(0, 300).map((x) => row(x.map(esc))), 'No records in this period.');
+        };
+        draw(p0);
+        onSubmit(form, () => { draw(params()); announce('Report generated.'); });
+        onClick('a[href="A801export_report_preview.html"]', (e, el) => { params(); go('A801export_report_preview.html' + (/CSV/i.test(el.textContent) ? '?auto=csv' : /PDF/i.test(el.textContent) ? '?auto=pdf' : '')); });
+    }
+    function pageExportPreview() {
+        const p = readParams(); const r = buildReport(p);
+        const ps = $$('main .content-card p');
+        const set = (re, v) => { const el = ps.find((x) => re.test(x.textContent)); if (el) el.innerHTML = `<strong>${el.querySelector('strong').textContent}</strong> ${esc(v)}`; };
+        set(/Report:/, p.type); set(/Period:/, `${p.from ? fmtDate(p.from) : 'Start'} to ${p.to ? fmtDate(p.to) : 'today'}`); set(/Records:/, `${r.count} booking(s), ${r.detail.rows.length} row(s) in the detail table`);
+        const tables = $$('main table'); fillTable(tables[0], r.metrics.map(([k, v]) => row([esc(k), esc(v)])), '');
+        const wrap = $('.table-wrap'); wrap.insertAdjacentHTML('afterend', `<h2>${esc(r.detail.title)}</h2><div class="table-wrap"><table><thead><tr>${r.detail.headers.map((x) => `<th scope="col">${esc(x)}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`);
+        fillTable($$('main table')[1], r.detail.rows.slice(0, 500).map((x) => row(x.map(esc))), 'No records in this period.');
+        const csv = () => { downloadCsv(`bearcat-report-${localDate()}.csv`, ['Metric', 'Value'], r.metrics.concat([['', ''], [r.detail.title, '']])); downloadCsv(`bearcat-${r.detail.title.toLowerCase().replace(/\W+/g, '-')}-${localDate()}.csv`, r.detail.headers, r.detail.rows); };
+        onClick('[data-export="csv"]', () => { csv(); announce('CSV files downloaded: the summary and the detail table.'); });
+        onClick('[data-export="pdf"]', () => { announce('Use "Save as PDF" in the print dialog.'); window.print(); });
+        const auto = queryParam('auto'); if (auto === 'csv') csv(); if (auto === 'pdf') setTimeout(() => window.print(), 300);
+    }
+
+    //DEMO DATA
+    function seedDemo(force) {
+        if (!force && readTable(K.BOOKINGS).length) return false;
+        if (API) API.BearcatStore.seedServices();
+        run((t) => {
+        const day = (n) => addDaysStr(n); const ago = (h) => new Date(Date.now() - h * 3600000).toISOString(); const ahead = (m) => new Date(Date.now() + m * 60000).toISOString();
+        const ymd = (iso) => iso.slice(0, 10).replace(/-/g, '');
+        const people = [['Maria Santos', 'maria.santos@example.com', '0917 123 4567'], ['Juan Dela Cruz', 'juan.delacruz@example.com', '0928 555 0101'], ['Ana Reyes', 'ana.reyes@example.com', '0935 222 3344'], ['Carlo Mendoza', 'carlo.m@example.com', '0999 888 7766'], ['Liza Bautista', 'liza.b@example.com', '0905 410 2020'], ['Pedro Garcia', 'pedro.g@example.com', '0915 600 1212']];
+        const custs = people.map(([n, e, c]) => t.insert(K.CUSTOMERS, 'customer_id', { full_name: n, email: e, contact_no: c, created_at: ago(72) }));
+        let seq = 0;
+        const mk = (ci, svc, pax, travel, status, o = {}) => {
+            seq += 1; const s = t.all(K.SERVICES).find((x) => num(x.service_id) === svc); const unit = num(s.base_rate) || 0; const sub = o.total != null ? o.total : r2(unit * (s.rate_unit === 'per pax' ? pax : 1));
+            const created = o.created || ago(5);
+            const b = t.insert(K.BOOKINGS, 'booking_id', { booking_ref: `BTT-${ymd(created)}-${String(1000 + seq * 37).slice(-4)}`, customer_id: custs[ci].customer_id, handled_by: o.handled || null, status, total_amount: sub, deposit_amount: o.deposit != null ? o.deposit : r2(sub * num(s.deposit_percent) / 100), payment_due_by: o.due || ahead(1440), remarks: o.remarks || 'one-way | Dep: 08:00 AM', created_at: created, approved_at: o.approved || null, updated_at: created });
+            t.insert(K.BOOKING_ITEMS, 'item_id', { booking_id: b.booking_id, service_id: svc, service_date: travel, pax_qty: pax, pickup_location: o.pickup || 'Puerto Princesa Airport', destination: o.dest || 'El Nido', unit_rate: unit, subtotal: sub });
+            for (let i = 0; i < Math.min(pax, 3); i += 1) t.insert(K.TRAVELERS, 'traveler_id', { booking_id: b.booking_id, full_name: i === 0 ? people[ci][0] : `${people[ci][0].split(' ')[0]} Companion ${i}`, birthdate: `199${i}-0${i + 3}-1${i}`, id_no: `ID-${1000 + seq}${i}` });
+            return b;
+        };
+        mk(0, 1, 4, day(10), 'pending', { created: ago(2) });
+        mk(1, 2, 3, day(2), 'pending', { created: ago(1), pickup: 'Hotel, Puerto Princesa', dest: 'Airport' });
+        mk(2, 1, 2, day(1), 'pending', { created: ago(0.5) });
+        mk(3, 3, 5, day(14), 'pending', { created: ago(3), total: 0, deposit: 0, remarks: 'Custom request: 4-day Coron and Palawan trip, island hopping, hotel pickup. Preferred budget around 35,000.', dest: 'Coron' });
+        mk(4, 1, 2, day(7), 'approved', { handled: 2, approved: ago(0.3), due: ahead(40), created: ago(4) });
+        mk(5, 2, 2, day(6), 'approved', { handled: 2, approved: ago(3), due: ago(2), created: ago(6) });
+        const b7 = mk(0, 1, 2, day(8), 'payment_submitted', { handled: 2, approved: ago(1), due: ahead(30), created: ago(5) });
+        t.insert(K.PAYMENTS, 'payment_id', { booking_id: b7.booking_id, verified_by: null, amount: b7.deposit_amount, method: 'GCash (REF778812)', proof_file: 'gcash_receipt.png', payment_status: 'submitted', paid_at: ago(0.4), verified_at: null });
+        const b8 = mk(1, 1, 3, day(9), 'confirmed', { handled: 2, approved: ago(30), created: ago(48) });
+        t.insert(K.PAYMENTS, 'payment_id', { booking_id: b8.booking_id, verified_by: 2, amount: b8.deposit_amount, method: 'Bank Transfer (BT-5521)', proof_file: 'bank.jpg', payment_status: 'verified', paid_at: ago(29), verified_at: ago(28) });
+        const b9 = mk(2, 1, 2, day(12), 'confirmed', { handled: 2, approved: ago(40), created: ago(50) });
+        t.insert(K.PAYMENTS, 'payment_id', { booking_id: b9.booking_id, verified_by: 2, amount: b9.deposit_amount, method: 'GCash (REF1002)', proof_file: 'g.png', payment_status: 'verified', paid_at: ago(39), verified_at: ago(38) });
+        t.insert(K.CHANGES, 'change_id', { booking_id: b9.booking_id, decided_by: null, request_type: 'change', details: `Please move the trip to ${day(16)} (the following weekend).`, change_fee_percent: 0, change_fee: 0, price_difference: 0, status: 'pending', requested_at: ago(6), decided_at: null });
+        const b10 = mk(3, 2, 2, day(11), 'confirmed', { handled: 2, approved: ago(60), created: ago(70) });
+        t.insert(K.PAYMENTS, 'payment_id', { booking_id: b10.booking_id, verified_by: 2, amount: b10.deposit_amount, method: 'GCash (REF2210)', proof_file: 'p.png', payment_status: 'verified', paid_at: ago(59), verified_at: ago(58) });
+        t.insert(K.CHANGES, 'change_id', { booking_id: b10.booking_id, decided_by: null, request_type: 'cancellation', details: 'Family emergency, we need to cancel.', change_fee_percent: 0, change_fee: 0, price_difference: 0, status: 'pending', requested_at: ago(9), decided_at: null });
+        mk(4, 2, 2, day(5), 'closed', { handled: 2, created: ago(90) });
+        const b12 = mk(5, 1, 4, day(15), 'cancelled', { handled: 1, approved: ago(100), created: ago(120) });
+        t.insert(K.PAYMENTS, 'payment_id', { booking_id: b12.booking_id, verified_by: 2, amount: b12.deposit_amount, method: 'GCash (REF9001)', proof_file: 'r.png', payment_status: 'verified', paid_at: ago(99), verified_at: ago(98) });
+        t.insert(K.REFUNDS, 'refund_id', { booking_id: b12.booking_id, amount: b12.deposit_amount, method: 'GCash', reason: 'Tour cancelled by the company due to bad weather', status: 'pending', reference_no: null, owner_remarks: null, requested_by: 2, decided_by: null, created_at: ago(20), decided_at: null, paid_at: null });
+        [[1, day(3), 20, 20, 'available'], [1, day(4), 20, 20, 'available'], [2, day(6), 8, 8, 'available'], [1, day(20), 20, 0, 'fully_booked']].forEach(([svc, d, mx, sl, st]) => t.insert(K.AVAIL, 'availability_id', { service_id: svc, service_date: d, max_capacity: mx, available_slots: sl, status: st, notes: '' }));
+        t.insert(K.AUDIT, 'log_id', { staff_id: 2, action: 'Verified payment and confirmed booking', booking_id: b8.booking_id, reference: b8.booking_ref, details: 'Sample entry', created_at: ago(28) });
+        });
+        return true;
+    }
+
+    //START
+    function frame() {
+        const u = me(); const nav = $('#primary-nav');
+        if (nav && !$('[data-logout]', nav)) nav.insertAdjacentHTML('beforeend', '<a href="A101staff_login.html" data-logout>Log out</a>');
+        const badge = $('.portal-badge'); if (badge && u) badge.title = `${u.full_name} (${ROLE_LABEL[u.role]})`;
+        const file = location.pathname.split('/').pop();
+        $$('#primary-nav a').forEach((a) => { if (a.getAttribute('href') === file) a.setAttribute('aria-current', 'page'); });
+    }
+
+    const PAGES = {
+        'staff-login': pageLogin, 'forgot-password': pageForgot, 'set-new-password': pageSetNewPassword, 'my-account': pageAccount,
+        'staff-dashboard': pageStaffDashboard, 'owner-dashboard': pageOwnerDashboard,
+        'bookings-list': () => pageBookingsList(false), 'all-company-bookings': () => pageBookingsList(true),
+        'review-booking': pageReviewBooking, 'close-booking-request': pageCloseBooking, 'booking-approved-staff': pageApproved, 'review-custom-request': pageCustomRequest, 'booking-details-owner': pageOwnerBookingDetails,
+        'payments-list': pagePaymentsList, 'verify-payment': pageVerifyPayment, 'payment-not-verified-staff': pagePaymentNotVerified, 'expired-payments': pageExpiredPayments,
+        'change-requests-list': pageChangeList, 'review-change-request': pageReviewChange, 'change-decision-saved': pageChangeSaved, 'change-confirmed-booking': pageChangeConfirmed,
+        'company-cancellation-refund': pageCompanyCancel, 'refunds-register': pageRefundRegister, 'review-release-refunds': pageReleaseRefunds, 'refund-recorded': pageRefundRecorded,
+        'date-availability-capacity': pageAvailability, 'manage-services-rates': pageServices, 'manage-staff-accounts': pageStaffAccounts,
+        'business-system-settings': pageBusinessSettings, 'deposit-change-policies': pagePolicies, 'notification-templates': pageTemplates,
+        'management-audit-trail': pageAudit, 'my-recent-activity': pageMyActivity, 'outgoing-notifications': pageNotifications,
+        'booking-payment-reports': pageReports, 'export-report-preview': pageExportPreview,
+    };
+
+    function start() {
+        ensureStaff();
+        if (ROLE !== 'access') {
+        document.body.style.visibility = 'hidden';
+        const u = me();
+        if (!u) { flash('Please log in to continue.'); go('A101staff_login.html'); return; }
+        if (ROLE === 'owner' && u.role !== 'owner') { try { sessionStorage.setItem('bearcatDemoNotice', 'That page is for management / owner accounts only.'); } catch (_) { /* ignore */ } go('A102staff_dashboard.html'); return; }
+        if (ROLE === 'owner' && sessionStorage.getItem(APP_ROLE_KEY) !== 'owner') { try { sessionStorage.setItem(APP_ROLE_KEY, 'owner'); } catch (_) { /* ignore */ } }
+        frame();
+        }
+        try { (PAGES[PAGE] || (() => { }))(); } catch (e) { if (e instanceof UserError) announce(e.message, true); else { console.error(e); announce('This page could not load its data. Please refresh.', true); } }
+        if (ROLE !== 'access') showFlash();
+        document.body.style.visibility = '';
+    }
+
+    window.BearcatAdmin = { K, run, peek, sha256, hashPassword, checkPassword, seedDemo, settings, summarize, buildReport };
+    start();
 })();
