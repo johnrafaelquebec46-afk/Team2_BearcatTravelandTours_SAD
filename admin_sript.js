@@ -566,4 +566,209 @@
         });
     }
 
+    //DASHBOARD MODULE
+    const PRIORITY_ORDER = { 'next-day': 0, rush: 1, regular: 2 };
+    function actionLink(sm, overdue) {
+        const q = refQ(sm.ref);
+        if (sm.code === 'pending') return [(sm.is_custom ? 'A405review_custom_request.html' : 'A202review_booking.html') + q, 'Review'];
+        if (sm.code === 'payment_submitted') return ['A302verify_payment.html' + q, 'Verify payment'];
+        if (sm.code === 'confirmed') return ['A404change_confirmed_booking.html' + q, 'Change'];
+        if (sm.code === 'approved' && overdue) return ['A305expired_payments.html' + q, 'Past deadline'];
+        return ['A202review_booking.html' + q, 'View'];
+    }
+    const isOverdue = (b) => normStatus(b.status) === 'approved' && b.payment_due_by && new Date(b.payment_due_by).getTime() < Date.now();
+    const statusCell = (sm) => pill(sm.code) + (sm.priority && sm.priority.key !== 'regular' ? ` <span class="hint">${esc(sm.priority.label)}: review ${esc(sm.priority.target)}</span>` : '');
+
+    function pageStaffDashboard() {
+        const t = peek(); const u = me(); const sums = allSummaries(t);
+        const pend = sums.filter((s) => s.code === 'pending');
+        const subs = t.all(K.PAYMENTS).filter((p) => normPay(p.payment_status) === 'submitted');
+        const chg = t.all(K.CHANGES).filter((c) => changeStatus(c.status) === 'pending');
+        const vals = $$('.stats-grid .stat-value'); [pend.length, subs.length, chg.length].forEach((v, i) => { if (vals[i]) vals[i].textContent = v; });
+        const hp = $$('.page-heading p').pop(); if (hp) hp.textContent = `Welcome back, ${u.full_name}.`;
+        const acct = sectionByHeading(/My account/i);
+        if (acct) { const s = $('strong', acct); if (s) s.textContent = u.full_name; const p = $('p', acct); if (p) p.lastChild.textContent = ` · ${ROLE_LABEL[u.role]}`; const m = $('.muted', acct); if (m) m.textContent = `Handled today: ${t.all(K.AUDIT).filter((a) => num(a.staff_id) === num(u.staff_id) && localDate(new Date(a.created_at)) === localDate()).length} action(s)`; }
+        const items = [];
+        pend.sort((a, b) => PRIORITY_ORDER[a.priority.key] - PRIORITY_ORDER[b.priority.key] || String(a.b.created_at).localeCompare(String(b.b.created_at))).forEach((s) => items.push({ s, label: statusCell(s), href: actionLink(s) }));
+        subs.forEach((p) => { const b = t.all(K.BOOKINGS).find((x) => num(x.booking_id) === num(p.booking_id)); if (!b) return; const s = summarize(t, b); items.push({ s, label: payPill('submitted') + ' payment', href: ['A302verify_payment.html' + refQ(s.ref) + '&pay=' + p.payment_id, 'Verify payment'] }); });
+        chg.forEach((c) => { const b = t.all(K.BOOKINGS).find((x) => num(x.booking_id) === num(c.booking_id)); if (!b) return; const s = summarize(t, b); items.push({ s, label: changePill('pending') + ` ${isCancelType(c.request_type) ? 'cancellation' : 'change'}`, href: ['A402review_change_request.html?id=' + c.change_id, 'Review request'] }); });
+        sums.filter((s) => isOverdue(s.b)).forEach((s) => items.push({ s, label: pill('approved') + ' <span class="hint">past payment deadline</span>', href: ['A305expired_payments.html' + refQ(s.ref), 'Resolve'] }));
+        fillTable($('#dashboard_table'), items.slice(0, 20).map(({ s, label, href }) => row([esc(s.ref), `${esc(s.customer.full_name)} · ${esc(s.services)}`, esc(fmtDate(s.travel_date)), label, btn(href[0], href[1])])), 'Nothing needs action right now.');
+    }
+
+    function pageOwnerDashboard() {
+        const t = peek(); const sums = allSummaries(t);
+        const verified = t.all(K.PAYMENTS).filter((p) => normPay(p.payment_status) === 'verified');
+        const refunds = t.all(K.REFUNDS).filter((r) => ['pending', 'approved'].includes(r.status)).length;
+        const vals = $$('.stats-grid .stat-value');
+        [sums.length, sums.filter((s) => s.code === 'confirmed').length, `${verified.length} (${peso(verified.reduce((a, p) => a + num(p.amount), 0))})`, refunds].forEach((v, i) => { if (vals[i]) vals[i].textContent = v; });
+        const recent = sums.slice().sort((a, b) => String(b.b.created_at).localeCompare(String(a.b.created_at))).slice(0, 8);
+        fillTable($('section:last-of-type table') || $('table'), recent.map((s) => row([esc(s.ref), esc(s.customer.full_name), esc(s.services), esc(fmtDate(s.travel_date)), pill(s.code), btn('A205booking_details_owner.html' + refQ(s.ref), 'View')])), 'No bookings yet.');
+    }
+
+    //BOOKING LISTS
+    function pageBookingsList(owner) {
+        const t = peek(); const sums = allSummaries(t);
+        const sec = $('section.content-card'); const table = $('table', sec);
+        const cmp = (a, b) => {
+        const pa = a.code === 'pending' ? PRIORITY_ORDER[a.priority.key] : 9; const pb = b.code === 'pending' ? PRIORITY_ORDER[b.priority.key] : 9;
+        return pa - pb || String(b.b.created_at).localeCompare(String(a.b.created_at));
+        };
+        const render = (f) => {
+        const list = sums.filter((s) => (!f.status || s.code === f.status) && matches(`${s.ref} ${s.customer.full_name} ${s.customer.email} ${s.services}`, f.q)).sort(cmp);
+        fillTable(table, list.map((s) => {
+            const [href, label] = owner ? ['A205booking_details_owner.html' + refQ(s.ref), 'View'] : actionLink(s, isOverdue(s.b));
+            return owner
+            ? row([esc(s.ref), esc(s.customer.full_name), esc(s.services), esc(fmtDate(s.travel_date)), esc(s.total > 0 ? peso(s.total) : 'To be quoted'), pill(s.code), btn(href, label)])
+            : row([esc(s.ref), `${esc(s.customer.full_name)} · ${esc(s.services)}`, esc(fmtDate(s.travel_date)), esc(s.pax), statusCell(s), btn(href, label)]);
+        }), sums.length ? 'No bookings match the filters.' : 'No booking requests yet. They appear here when customers submit a booking.');
+        };
+        const get = addFilters(sec, [
+        { id: 'status', label: 'Status', type: 'select', options: [['', 'All statuses'], ...Object.entries(STATUS)] },
+        { id: 'q', label: 'Search', type: 'text', placeholder: 'Reference, customer or service' },
+        ], render);
+        const pre = queryParam('status'); if (pre && STATUS[pre]) { $('[data-f="status"]', sec).value = pre; }
+        render(get());
+    }
+
+    //BOOKING WORKFLOWS
+    const bookingByQuery = (t) => { const r = queryParam('ref'); return r ? findBooking(t, r) : null; };
+
+    /** Approve a pending booking (FR-12, FR-13, BR-05). opts: { total, depositPct, remarks } */
+    function approveBooking(t, b, opts = {}) {
+        const me_ = me();
+        if (normStatus(b.status) !== 'pending') fail(`Only pending requests can be approved. This one is "${statusLabel(normStatus(b.status))}".`);
+        const items = itemsOf(t, b);
+        if (!items.length) fail('This booking has no service lines, so it cannot be approved.');
+        const block = blockers(checkAvailability(t, items)); if (block.length) fail(blockText(block));
+        if (opts.total != null) {
+        const total = r2(opts.total); b.total_amount = total;
+        const raw = t.all(K.BOOKING_ITEMS).filter((i) => num(i.booking_id) === num(b.booking_id));
+        raw.forEach((i, idx) => { i.subtotal = idx === 0 ? total : 0; if (idx === 0) i.unit_rate = num(i.pax_qty) > 0 ? r2(total / num(i.pax_qty)) : total; });
+        t.dirty(K.BOOKING_ITEMS);
+        b.deposit_amount = r2(total * num(opts.depositPct || settings().deposit_default) / 100);
+        } else if (!(num(b.deposit_amount) > 0)) {
+        b.deposit_amount = computeDeposit(items, num(b.total_amount));
+        }
+        if (!(num(b.total_amount) > 0)) fail('Enter a total amount before approving.');
+        const hours = Math.max(num(settings().payment_deadline_hours) || 1, 0.25);
+        const due = new Date(Date.now() + hours * 3600000).toISOString();
+        if (opts.remarks) appendRemark(b, opts.remarks);
+        moveBooking(t, b, 'approved', { handled_by: me_.staff_id, approved_at: nowIso(), payment_due_by: due });
+        reserveSlots(t, b);
+        audit(t, 'Approved booking request', { booking: b, details: `Down payment ${peso(b.deposit_amount)} due by ${fmtDT(due)}` });
+        return notify(t, b, 'booking_approved', { amount: b.deposit_amount, deadline: due, remarks: opts.remarks || '' });
+    }
+    function closeBooking(t, b, reason, extra, to = 'closed') {
+        const from = normStatus(b.status);
+        if (!['pending', 'approved', 'payment_submitted'].includes(from)) fail(`A booking that is "${statusLabel(from)}" can no longer be closed.`);
+        appendRemark(b, `Closed - ${reason}${extra ? '. ' + extra : ''}`);
+        moveBooking(t, b, to, { handled_by: me().staff_id });
+        audit(t, to === 'expired' ? 'Closed expired booking' : 'Closed booking request', { booking: b, details: [reason, extra].filter(Boolean).join('. ') });
+        return notify(t, b, 'booking_closed', { remarks: [reason, extra].filter(Boolean).join('. ') });
+    }
+
+    function pageReviewBooking() {
+        const t = peek(); const b = bookingByQuery(t);
+        if (!b) return missing('That booking could not be found. Open it from the bookings list.', 'A201bookings_list.html');
+        const sm = summarize(t, b);
+        if (sm.is_custom && sm.code === 'pending') { go('A405review_custom_request.html' + refQ(sm.ref)); return; }
+        fillHeader(sm); fillSummary(t, sm);
+        const trav = travelersOf(t, b);
+        const tt = $$('table').pop();
+        fillTable(tt, trav.map((x) => row([esc(x.full_name), esc(fmtDate(x.birthdate)), esc(x.id_no || '—')])), 'No traveler details were submitted.');
+        const form = $('form.demo-form');
+        const sel = field(form, 1);
+        sel.innerHTML = '<option value="approve">Approve</option><option value="correction">Request correction (notify customer)</option><option value="close">Close request</option>';
+        const closeLink = $('a[href="A203close_booking_request.html"]', form); if (closeLink) closeLink.href = 'A203close_booking_request.html' + refQ(sm.ref);
+        const dl = $('.hint', form); if (dl) dl.textContent = `Payment deadline: ${settings().payment_deadline_hours} hour(s) after approval. Review target: ${sm.priority ? sm.priority.target : '—'}.`;
+        availabilityHint(t, sm, $('.form-actions', form));
+        if (sm.code !== 'pending') {
+        $$('select, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; });
+        form.insertAdjacentHTML('afterbegin', `<p class="hint">This booking is "${esc(statusLabel(sm.code))}", so no approval decision is needed.${sm.code === 'approved' ? ' Use the link below if you need to close it.' : ''}</p>`);
+        if (['approved', 'payment_submitted'].includes(sm.code)) { /* the Close link stays enabled */ } else if (closeLink) closeLink.remove();
+        }
+        onSubmit(form, () => {
+        const decision = sel.value; const remarks = cleanMulti(field(form, 2).value, 600);
+        const out = run((tx) => {
+            const bk = findBooking(tx, sm.ref);
+            if (decision === 'approve') return { n: approveBooking(tx, bk, { remarks }), kind: 'approve' };
+            if (decision === 'close') { if (remarks.length < 3) fail('Enter the reason for closing; the customer will see it.'); return { n: closeBooking(tx, bk, remarks, ''), kind: 'close' }; }
+            if (remarks.length < 3) fail('Describe what the customer needs to correct.');
+            if (normStatus(bk.status) !== 'pending') fail('Only pending requests can be sent back for correction.');
+            appendRemark(bk, `Correction requested - ${remarks}`); bk.handled_by = me().staff_id; bk.updated_at = nowIso(); tx.dirty(K.BOOKINGS);
+            audit(tx, 'Requested correction', { booking: bk, details: remarks });
+            return { n: notify(tx, bk, 'correction_requested', { remarks }), kind: 'correction' };
+        });
+        if (out.kind === 'approve') go('A206booking_approved_staff.html' + refQ(sm.ref));
+        else { flash(out.kind === 'close' ? `Booking ${sm.ref} was closed. ${noticeText(out.n)}` : `Correction request sent for ${sm.ref}. ${noticeText(out.n)}`); go('A201bookings_list.html'); }
+        });
+    }
+
+    function pageCloseBooking() {
+        const t = peek(); const b = bookingByQuery(t);
+        if (!b) return missing('That booking could not be found. Open it from the bookings list.', 'A201bookings_list.html');
+        const sm = summarize(t, b);
+        replacePlaceholders({ '[reference id]': ' ' + sm.ref });
+        const back = $('a[href="A202review_booking.html"]'); if (back) back.href = (sm.is_custom && sm.code === 'pending' ? 'A405review_custom_request.html' : 'A202review_booking.html') + refQ(sm.ref);
+        const form = $('form.demo-form');
+        if (!['pending', 'approved', 'payment_submitted'].includes(sm.code)) { $$('input, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); announce(`This booking is "${statusLabel(sm.code)}" and can no longer be closed.`, true); }
+        onSubmit(form, () => {
+        const reason = clean(field(form, 1).value, 200); const remarks = cleanMulti(field(form, 2).value, 600);
+        if (reason.length < 3 || remarks.length < 3) fail('Enter both the closure reason and the remarks for the customer.');
+        const n = run((tx) => closeBooking(tx, findBooking(tx, sm.ref), reason, remarks));
+        flash(`Booking ${sm.ref} was closed. ${noticeText(n)}`); go('A201bookings_list.html');
+        });
+    }
+
+    function pageApproved() {
+        const t = peek(); const b = bookingByQuery(t);
+        if (!b) return missing('That booking could not be found.', 'A201bookings_list.html');
+        const sm = summarize(t, b);
+        setPill($('.status-pill'), sm.code); replacePlaceholders({ '[reference id]': sm.ref });
+        const last = t.all(K.NOTICES).filter((n) => num(n.booking_id) === num(b.booking_id) && n.template_type === 'booking_approved');
+        const ps = $$('main .content-card p');
+        if (ps[0]) ps[0].textContent = last.length ? `Customer notice: ${[...new Set(last.slice(-2).map((n) => n.channel.toUpperCase()))].join(' / ')} recorded (${last.slice(-1)[0].status}).` : 'Customer notice: none recorded (email and SMS are off, or the customer has no contact details).';
+        if (ps[1]) ps[1].textContent = `Down payment ${peso(b.deposit_amount)} is due by ${fmtDT(b.payment_due_by)} (${settings().payment_deadline_hours}-hour deadline).`;
+    }
+
+    function pageCustomRequest() {
+        const t = peek(); const b = bookingByQuery(t);
+        if (!b) return missing('That request could not be found. Open it from the bookings list.', 'A201bookings_list.html');
+        const sm = summarize(t, b); fillHeader(sm); fillSummary(t, sm);
+        const req = $$('main .content-card p').find((p) => /Customer-provided/.test(p.textContent));
+        if (req) req.textContent = [b.remarks, routeOf(sm.items), `${sm.pax} traveler(s)`].filter(Boolean).join(' | ');
+        const form = $('form.demo-form'); $$('a[href="A203close_booking_request.html"]').forEach((a) => { a.href = 'A203close_booking_request.html' + refQ(sm.ref); });
+        if (num(b.total_amount) > 0) field(form, 1).value = num(b.total_amount);
+        const dsel = field(form, 2); const cur = String(num(sm.items[0] && sm.items[0].deposit_percent) || 30) + '%';
+        const o = [...dsel.options].find((x) => x.text === cur); if (o) dsel.value = o.value;
+        availabilityHint(t, sm, $('.form-actions', form));
+        if (sm.code !== 'pending') { $$('input, select, textarea, button[type="submit"]', form).forEach((el) => { el.disabled = true; }); form.insertAdjacentHTML('afterbegin', `<p class="hint">This request is "${esc(statusLabel(sm.code))}" and can no longer be quoted.</p>`); }
+        onSubmit(form, () => {
+        const total = num(field(form, 1).value); const pct = parseInt(dsel.value || dsel.selectedOptions[0].text, 10) || 30; const remarks = cleanMulti(field(form, 3).value, 600);
+        if (!(total > 0)) fail('Enter an estimated total greater than zero.');
+        if (total > 10000000) fail('That total looks too large. Please check it.');
+        run((tx) => approveBooking(tx, findBooking(tx, sm.ref), { total, depositPct: pct, remarks: remarks ? `Proposed itinerary: ${remarks}` : '' }));
+        go('A206booking_approved_staff.html' + refQ(sm.ref));
+        });
+    }
+
+    function pageOwnerBookingDetails() {
+        const t = peek(); const b = bookingByQuery(t);
+        if (!b) return missing('That booking could not be found. Open it from the bookings list.', 'A105all_company_bookings.html');
+        const sm = summarize(t, b); fillHeader(sm); fillSummary(t, sm);
+        const pays = paymentsOf(t, b); const latest = pays.slice(-1)[0];
+        const ps = $$('main .content-card p');
+        const payP = ps.find((p) => /Payment status/.test(p.textContent)); if (payP) payP.innerHTML = `<strong>Payment status:</strong> ${latest ? esc(PAY[normPay(latest.payment_status)]) : 'No payment submitted'}`;
+        const cp = ps.find((p) => /Created/.test(p.textContent)); if (cp) cp.innerHTML = `<strong>Created:</strong> ${esc(fmtDT(b.created_at))}` + (b.handled_by ? ` · <strong>Handled by:</strong> ${esc(staffName(t, b.handled_by) || '—')}` : '');
+        const cancel = $('a[href="A503company_cancellation_refund.html"]'); if (cancel) { cancel.href = 'A503company_cancellation_refund.html' + refQ(sm.ref); if (TERMINAL.includes(sm.code)) cancel.remove(); }
+        const audit_ = $('a[href="A106management_audit_trail.html"]'); if (audit_) audit_.href = 'A106management_audit_trail.html' + refQ(sm.ref);
+        const chg = changesOf(t, b); const refs = refundsOf(t, b);
+        const mgmt = sectionByHeading(/Management actions/i);
+        const tbl = (head, rows, empty) => `<div class="table-wrap"><table><thead><tr>${head.map((h) => `<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.join('') : `<tr><td colspan="${head.length}" class="muted">${empty}</td></tr>`}</tbody></table></div>`;
+        const html = `<section class="surface content-card"><h2>Payments</h2>${tbl(['Method', 'Amount', 'Status', 'Paid at', 'Verified by'], pays.map((p) => { const m = splitMethod(p.method); return row([esc(m.name + (m.ref ? ' · ' + m.ref : '')), esc(peso(p.amount)), payPill(normPay(p.payment_status)), esc(fmtDT(p.paid_at)), esc(staffName(t, p.verified_by) || '—')]); }), 'No payments yet.')}
+        <h2>Change and cancellation requests</h2>${tbl(['Type', 'Requested', 'Status', 'Decided by', 'Fee'], chg.map((c) => row([esc(isCancelType(c.request_type) ? 'Cancellation' : 'Change'), esc(fmtDT(c.requested_at)), changePill(changeStatus(c.status)), esc(staffName(t, c.decided_by) || '—'), esc(num(c.change_fee) ? peso(c.change_fee) : '—')])), 'No requests.')}
+        <h2>Refunds</h2>${tbl(['Amount', 'Status', 'Reason'], refs.map((r) => row([esc(peso(r.amount)), esc(r.status), esc(r.reason || '—')])), 'No refunds.')}</section>`;
+        if (mgmt) mgmt.insertAdjacentHTML('afterend', html);
+    }
 })();
