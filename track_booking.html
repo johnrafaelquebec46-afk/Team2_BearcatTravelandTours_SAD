@@ -44,30 +44,31 @@
           <option value="not-found">Not found</option>
         </select><button class="button button-primary" type="submit">Search booking</button>
       </form>
-      <section class="surface content-card lavender-panel">
-        <p class="eyebrow">BOOKING REFERENCE</p><span class="status-pill status-approved">Approved</span>
-        <h2 class="booking-reference">BTT-XXXXXX</h2>
+      <section class="surface content-card lavender-panel" data-track-preview>
+        <p class="eyebrow">BOOKING REFERENCE</p>
+        <h2>No booking loaded</h2>
         <dl class="summary-list">
           <div>
             <dt>Service / date</dt>
-            <dd>Selected service · MM/DD/YY</dd>
+            <dd>—</dd>
           </div>
           <div>
             <dt>Travelers</dt>
-            <dd><span data-traveler-count>—</span> people</dd>
+            <dd>—</dd>
           </div>
           <div>
             <dt>Last updated</dt>
-            <dd>MM/DD/YYYY · 00:00</dd>
+            <dd>—</dd>
           </div>
         </dl>
+        <p class="hint">Enter your reference and email, then choose Search booking to see your booking.</p>
       </section>
     </div>
     <section class="surface content-card timeline-panel">
       <h2>Booking status timeline</h2>
-      <ol class="booking-timeline">
-        <li class="done">✓ Pending</li>
-        <li class="done">✓ Approved</li>
+      <ol class="booking-timeline" data-track-timeline>
+        <li>1&nbsp; Pending</li>
+        <li>2&nbsp; Approved</li>
         <li>3&nbsp; Confirmed</li>
       </ol>
       <p class="hint">The status updates after staff review and payment verification.</p><a

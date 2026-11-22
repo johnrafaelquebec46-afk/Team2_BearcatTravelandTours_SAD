@@ -924,6 +924,7 @@
         const oldTotal = num(b.total_amount); const fee = r2(oldTotal * pct / 100); const newTotal = r2(oldTotal + diff);
         if (newTotal < 0) fail('The price difference would make the total negative.');
         const rawItems = t.all(K.BOOKING_ITEMS).filter((i) => num(i.booking_id) === num(b.booking_id));
+        const previousDate = (rawItems[0] && rawItems[0].service_date) || '';
         const holding = RESERVED.includes(from);
         if (newDate) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate) || daysUntil(newDate) == null || daysUntil(newDate) < 1) fail('The new travel date must be from tomorrow onward.');
@@ -936,7 +937,7 @@
         b.total_amount = newTotal;
         if (from !== 'confirmed') b.deposit_amount = computeDeposit(itemsOf(t, b), newTotal); // after confirmation the down payment is already paid
         appendRemark(b, `Change approved${remarks ? ' - ' + remarks : ''}`); b.handled_by = sid; b.updated_at = nowIso(); t.dirty(K.BOOKINGS);
-        Object.assign(c, { status: 'approved', decided_by: sid, decided_at: nowIso(), change_fee_percent: pct, change_fee: fee, price_difference: r2(diff), details: withRemarks }); t.dirty(K.CHANGES);
+        Object.assign(c, { status: 'approved', decided_by: sid, decided_at: nowIso(), change_fee_percent: pct, change_fee: fee, price_difference: r2(diff), previous_date: previousDate, requested_date: newDate || '', details: withRemarks }); t.dirty(K.CHANGES);
         const due = r2(fee + Math.max(diff, 0));
         audit(t, 'Approved change request', { booking: b, details: `Fee ${pct}% = ${peso(fee)}, price difference ${peso(diff)}, new total ${peso(newTotal)}${newDate ? ', new date ' + fmtDate(newDate) : ''}` });
         return { n: notify(t, b, 'change_decision', { status: 'approved', amount: due, remarks }), status: 'approved', due };
