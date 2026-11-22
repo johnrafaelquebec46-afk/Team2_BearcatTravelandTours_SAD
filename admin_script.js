@@ -479,7 +479,7 @@
 
     // Staff Account access
     function pageLogin() {
-        if (me()) { go(roleOf(me().role) === 'owner' && sessionStorage.getItem(APP_ROLE_KEY) === 'owner' ? 'A104owner_dashboard.html' : 'A102staff_dashboard.html'); return; }
+        if (me()) { go(roleOf(me().role) === 'owner' ? 'A104owner_dashboard.html' : 'A102staff_dashboard.html'); return; }
         showFlash();
         const form = $('#login-form');
         const LOCK = 'bearcatAdminLock';
@@ -496,9 +496,9 @@
         }
         if (want === 'owner' && roleOf(acct.role) !== 'owner') fail('This account is not a management / owner account. Choose "Company personnel".');
         try { localStorage.removeItem(LOCK); } catch (_) { /* ignore */ }
-        try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ staff_id: acct.staff_id, at: Date.now() })); sessionStorage.setItem(APP_ROLE_KEY, want); } catch (_) { fail('Your browser is blocking session storage, so you cannot stay signed in.'); }
+        try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ staff_id: acct.staff_id, at: Date.now() })); sessionStorage.setItem(APP_ROLE_KEY, roleOf(acct.role)); } catch (_) { fail('Your browser is blocking session storage, so you cannot stay signed in.'); }
         run((t) => audit(t, 'Signed in'));
-        go(want === 'owner' ? 'A104owner_dashboard.html' : 'A102staff_dashboard.html');
+        go(roleOf(acct.role) === 'owner' ? 'A104owner_dashboard.html' : 'A102staff_dashboard.html'); // go by the account's real role, not the dropdown (BUG-14)
         });
         if (queryParam('seed') === 'demo') {
         const done = seedDemo(queryParam('force') === '1');
@@ -803,8 +803,18 @@
         const due = num(b.deposit_amount) > 0 ? num(b.deposit_amount) : computeDeposit(sm.items, sm.total);
         const late = b.payment_due_by && p.paid_at && new Date(p.paid_at).getTime() > new Date(b.payment_due_by).getTime();
         const cells = $$('tbody tr td:nth-child(2)');
-        const vals = [peso(due), peso(p.amount), m.name, m.ref || '—', `${fmtDT(p.paid_at)} / deadline ${fmtDT(b.payment_due_by)}${late ? ' (paid after the deadline)' : ''}`, p.proof_file ? `Uploaded file: ${p.proof_file} (the customer site stores only the file name, so the image cannot be previewed here)` : 'No proof file recorded'];
+        const vals = [peso(due), peso(p.amount), m.name, m.ref || '—', `${fmtDT(p.paid_at)} / deadline ${fmtDT(b.payment_due_by)}${late ? ' (paid after the deadline)' : ''}`, p.proof_file ? `Uploaded file: ${p.proof_file}` : 'No proof file recorded'];
         cells.forEach((c, i) => { if (vals[i] != null) c.textContent = vals[i]; });
+        if (p.proof_data && cells[5]) {
+            const data = String(p.proof_data);
+            if (/^data:image\/(jpeg|png|webp);base64,/.test(data)) {
+                const img = document.createElement('img'); img.src = data; img.alt = `Payment proof: ${p.proof_file || 'uploaded image'}`; img.style.cssText = 'display:block;max-width:100%;max-height:420px;margin-top:.5rem;border:1px solid #ccc;border-radius:6px';
+                cells[5].appendChild(img);
+            } else if (/^data:application\/pdf;base64,/.test(data)) {
+                const a = document.createElement('a'); a.href = data; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open PDF proof'; a.className = 'button button-soft'; a.style.marginTop = '.5rem';
+                cells[5].appendChild(document.createElement('br')); cells[5].appendChild(a);
+            }
+        } else if (p.proof_file && cells[5]) cells[5].append(' (no image preview was saved for this payment)');
         const form = $('form.demo-form'); const nv = $('a[href="A303payment_not_verified_staff.html"]', form);
         if (nv) nv.href = `A303payment_not_verified_staff.html${refQ(sm.ref)}&pay=${p.payment_id}`;
         if (st !== 'submitted' || sm.code !== 'payment_submitted') {
