@@ -1,0 +1,23 @@
+{
+  "name": "bearcat-api",
+  "version": "1.0.0",
+  "description": "REST API between the Bearcat static front-end (GitHub Pages) and MySQL",
+  "main": "server.js",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "setup-db": "node scripts/setup-db.js",
+    "seed": "node scripts/seed.js",
+    "seed:demo": "node scripts/seed.js --demo"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.0"
+  }
+}
