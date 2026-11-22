@@ -1913,3 +1913,107 @@ td {
   background: var(--lavender);
   box-shadow: var(--shadow-inset)
 }
+
+/* =====================================================================
+   Staff / owner / access portal: single-row navigation
+   Scoped to body[data-role] so the customer pages are not affected.
+   The button count is detected from the number of links in the nav
+   (including the injected "Log out"), so no HTML or JS edits are needed.
+   ===================================================================== */
+body[data-role] .primary-nav {
+  --nav-count: 4;
+  grid-template-columns: repeat(var(--nav-count), minmax(0, 1fr));
+  grid-template-rows: auto;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+body[data-role] .primary-nav:has(> a:nth-child(5)) { --nav-count: 5; }
+body[data-role] .primary-nav:has(> a:nth-child(6)) { --nav-count: 6; }
+body[data-role] .primary-nav:has(> a:nth-child(7)) { --nav-count: 7; }
+body[data-role] .primary-nav:has(> a:nth-child(8)) { --nav-count: 8; }
+body[data-role] .primary-nav:has(> a:nth-child(9)) { --nav-count: 9; }
+
+body[data-role] .primary-nav::before {
+  width: calc((100% - .64rem) / var(--nav-count));
+}
+
+body[data-role] .primary-nav > a {
+  padding: .6rem .3rem;
+  font-size: .78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* pill position: current page */
+body[data-role] .primary-nav:has(> a:nth-child(1)[aria-current="page"]) { --nav-index: 0; }
+body[data-role] .primary-nav:has(> a:nth-child(2)[aria-current="page"]) { --nav-index: 1; }
+body[data-role] .primary-nav:has(> a:nth-child(3)[aria-current="page"]) { --nav-index: 2; }
+body[data-role] .primary-nav:has(> a:nth-child(4)[aria-current="page"]) { --nav-index: 3; }
+body[data-role] .primary-nav:has(> a:nth-child(5)[aria-current="page"]) { --nav-index: 4; }
+body[data-role] .primary-nav:has(> a:nth-child(6)[aria-current="page"]) { --nav-index: 5; }
+body[data-role] .primary-nav:has(> a:nth-child(7)[aria-current="page"]) { --nav-index: 6; }
+body[data-role] .primary-nav:has(> a:nth-child(8)[aria-current="page"]) { --nav-index: 7; }
+body[data-role] .primary-nav:has(> a:nth-child(9)[aria-current="page"]) { --nav-index: 8; }
+
+/* pill position: hover / keyboard focus (must stay after the rules above) */
+body[data-role] .primary-nav:has(> a:nth-child(1):hover),
+body[data-role] .primary-nav:has(> a:nth-child(1):focus-visible) { --nav-index: 0; }
+body[data-role] .primary-nav:has(> a:nth-child(2):hover),
+body[data-role] .primary-nav:has(> a:nth-child(2):focus-visible) { --nav-index: 1; }
+body[data-role] .primary-nav:has(> a:nth-child(3):hover),
+body[data-role] .primary-nav:has(> a:nth-child(3):focus-visible) { --nav-index: 2; }
+body[data-role] .primary-nav:has(> a:nth-child(4):hover),
+body[data-role] .primary-nav:has(> a:nth-child(4):focus-visible) { --nav-index: 3; }
+body[data-role] .primary-nav:has(> a:nth-child(5):hover),
+body[data-role] .primary-nav:has(> a:nth-child(5):focus-visible) { --nav-index: 4; }
+body[data-role] .primary-nav:has(> a:nth-child(6):hover),
+body[data-role] .primary-nav:has(> a:nth-child(6):focus-visible) { --nav-index: 5; }
+body[data-role] .primary-nav:has(> a:nth-child(7):hover),
+body[data-role] .primary-nav:has(> a:nth-child(7):focus-visible) { --nav-index: 6; }
+body[data-role] .primary-nav:has(> a:nth-child(8):hover),
+body[data-role] .primary-nav:has(> a:nth-child(8):focus-visible) { --nav-index: 7; }
+body[data-role] .primary-nav:has(> a:nth-child(9):hover),
+body[data-role] .primary-nav:has(> a:nth-child(9):focus-visible) { --nav-index: 8; }
+
+/* Narrower laptops: nav drops under the brand but stays ONE row of buttons */
+@media (max-width: 1280px) {
+  body[data-role] .site-header {
+    flex-wrap: wrap;
+  }
+
+  body[data-role] .primary-nav {
+    order: 4;
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  body[data-role] .portal-badge {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 860px) {
+  body[data-role] .primary-nav > a {
+    padding-inline: .15rem;
+    font-size: .68rem;
+  }
+}
+
+/* Phones: keep the existing "Menu" dropdown (stacked list, no pill) */
+@media (max-width: 700px) {
+  body[data-role] .primary-nav {
+    grid-template-columns: 100%;
+    grid-auto-flow: row;
+    grid-auto-columns: 100%;
+  }
+
+  body[data-role] .primary-nav > a {
+    padding: .6rem .8rem;
+    font-size: .92rem;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
