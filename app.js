@@ -61,6 +61,34 @@
       }
       return { ok: true };
     },
+    // Reads the proof so staff can preview it (BUG-06). Images are shrunk so they fit in localStorage; small PDFs are kept as-is.
+    readProofData(file) {
+      return new Promise((resolve) => {
+        if (!file) return resolve("");
+        const reader = new FileReader();
+        reader.onerror = () => resolve("");
+        reader.onload = () => {
+          const original = String(reader.result || "");
+          if (file.type === "application/pdf") return resolve(original.length <= 900 * 1024 ? original : "");
+          const img = new Image();
+          img.onerror = () => resolve("");
+          img.onload = () => {
+            try {
+              const scale = Math.min(1, 900 / Math.max(img.width, img.height));
+              const canvas = document.createElement("canvas");
+              canvas.width = Math.max(1, Math.round(img.width * scale));
+              canvas.height = Math.max(1, Math.round(img.height * scale));
+              const ctx = canvas.getContext("2d");
+              ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL("image/jpeg", 0.7));
+            } catch (_) { resolve(""); }
+          };
+          img.src = original;
+        };
+        reader.readAsDataURL(file);
+      });
+    },
     generateBookingRef() {
       const datePart = localToday().replace(/-/g, "");
       const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -1078,7 +1106,7 @@
       }
       return { ok: true, booking };
     },
-    recordPayment({ bookingRef, method, amount, paymentRef, file }) {
+    recordPayment({ bookingRef, method, amount, paymentRef, file, proofData }) {
       const lookup = this.verifyBookingOwnership(bookingRef);
       if (!lookup.ok) return lookup;
 
@@ -1117,11 +1145,16 @@
         amount: Number(numericAmount.toFixed(2)),
         method: `${cleanMethod} (${cleanPayRef})`,
         proof_file: file.name,
+        proof_data: proofData || "",
         payment_status: "submitted",
         paid_at: now,
         verified_at: null
       });
-      BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments);
+      if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) {
+        // storage full: keep the payment, just without the preview image
+        payments[payments.length - 1].proof_data = "";
+        if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) return { ok: false, message: "Your payment could not be saved because browser storage is full." };
+      }
 
       const bookings = BearcatStore.readTable(DB_KEYS.BOOKINGS);
       const targetBooking = bookings.find((b) => Number(b.booking_id) === Number(lookup.booking.booking_id));
@@ -1267,21 +1300,25 @@
         const payRef = document.getElementById("pay-ref")?.value;
         const proofFile = document.getElementById("pay-proof")?.files?.[0];
 
-        const result = BearcatPostBooking.recordPayment({
-          bookingRef: targetRef,
-          method,
-          amount,
-          paymentRef: payRef,
-          file: proofFile
+        const proofReady = BearcatIntegrity.validateProofFile(proofFile).ok ? BearcatIntegrity.readProofData(proofFile) : Promise.resolve("");
+        proofReady.then((proofData) => {
+          const result = BearcatPostBooking.recordPayment({
+            bookingRef: targetRef,
+            method,
+            amount,
+            paymentRef: payRef,
+            file: proofFile,
+            proofData
+          });
+
+          if (!result.ok) {
+            announce(result.message);
+            window.alert(result.message);
+            return;
+          }
+
+          go(form.dataset.next || "payment_submitted.html");
         });
-
-        if (!result.ok) {
-          announce(result.message);
-          window.alert(result.message);
-          return;
-        }
-
-        go(form.dataset.next || "payment_submitted.html");
         return;
       }
 
