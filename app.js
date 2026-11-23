@@ -61,6 +61,34 @@
       }
       return { ok: true };
     },
+    // Reads the proof so staff can preview it (BUG-06). Images are shrunk so they fit in localStorage; small PDFs are kept as-is.
+    readProofData(file) {
+      return new Promise((resolve) => {
+        if (!file) return resolve("");
+        const reader = new FileReader();
+        reader.onerror = () => resolve("");
+        reader.onload = () => {
+          const original = String(reader.result || "");
+          if (file.type === "application/pdf") return resolve(original.length <= 900 * 1024 ? original : "");
+          const img = new Image();
+          img.onerror = () => resolve("");
+          img.onload = () => {
+            try {
+              const scale = Math.min(1, 900 / Math.max(img.width, img.height));
+              const canvas = document.createElement("canvas");
+              canvas.width = Math.max(1, Math.round(img.width * scale));
+              canvas.height = Math.max(1, Math.round(img.height * scale));
+              const ctx = canvas.getContext("2d");
+              ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL("image/jpeg", 0.7));
+            } catch (_) { resolve(""); }
+          };
+          img.src = original;
+        };
+        reader.readAsDataURL(file);
+      });
+    },
     generateBookingRef() {
       const datePart = localToday().replace(/-/g, "");
       const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -555,7 +583,8 @@
     }
 
     // 2. Service details page: the service chosen on the Services page (?service=name, set by the click handler below)
-    const detailPanel = document.querySelector(".review-grid .lavender-panel");
+    // Only the Service details page owns this preview panel; change_request / change_approved also use .review-grid .lavender-panel.
+    const detailPanel = document.body.dataset.page === "service-details" ? document.querySelector(".review-grid .lavender-panel") : null;
     if (detailPanel) {
       const wanted = (new URLSearchParams(window.location.search).get("service") || BearcatBookingFlow.readDraft()?.item?.service_label || "").trim().toLowerCase();
       const svc = open.find((s) => s.service_name.toLowerCase() === wanted) || open.find((s) => s.service_name.toLowerCase().includes(wanted) && wanted) || open[0];
@@ -873,7 +902,8 @@
         const matchOpt = [...serviceEl.options].find((o) => o.text === savedDraft.item.service_label || o.value === savedDraft.item.service_label);
         if (matchOpt) serviceEl.value = matchOpt.value;
       }
-      const bookingFormEl = document.getElementById("booking-details-form") || document.querySelector('[data-page-form="booking-details"]');
+    }
+    const bookingFormEl = document.getElementById("booking-details-form") || document.querySelector('[data-page-form="booking-details"]');
     const syncBookingDraft = () => {
       const serviceInput = document.getElementById("trip-service");
       const tripType = bookingFormEl?.querySelector('input[name="tripType"]:checked')?.value || "one-way";
@@ -900,9 +930,9 @@
       });
     };
 
+    // Auto-save starts on the first visit too; an existing draft is not required.
     bookingFormEl?.addEventListener("input", syncBookingDraft);
     bookingFormEl?.addEventListener("change", syncBookingDraft);
-    }
   }
   // Auto-save & auto-restore Traveler Details cards (even when clicking Back)
   const travelerEntryForm = document.querySelector(".traveler-entry-form");
@@ -1061,9 +1091,19 @@
       }
       return { ok: true, booking };
     },
-    recordPayment({ bookingRef, method, amount, paymentRef, file }) {
+    recordPayment({ bookingRef, method, amount, paymentRef, file, proofData }) {
       const lookup = this.verifyBookingOwnership(bookingRef);
       if (!lookup.ok) return lookup;
+
+      const currentStatus = String(lookup.booking.status || "pending").toLowerCase();
+      if (currentStatus !== "approved") {
+        const statusText = { pending: "Pending", payment_submitted: "Payment submitted", confirmed: "Confirmed", expired: "Expired", closed: "Closed", cancelled: "Cancelled" }[currentStatus] || currentStatus;
+        return { ok: false, message: `This booking is "${statusText}" and cannot accept a payment. Payment is only allowed after staff approve the booking.` };
+      }
+      const dueAt = lookup.booking.payment_due_by ? new Date(lookup.booking.payment_due_by).getTime() : NaN;
+      if (Number.isFinite(dueAt) && Date.now() > dueAt) {
+        return { ok: false, message: "The payment deadline for this booking has already passed. Contact staff to request an extension." };
+      }
 
       const cleanMethod = BearcatIntegrity.sanitize(method, 50);
       const cleanPayRef = BearcatIntegrity.sanitize(paymentRef, 80);
@@ -1090,11 +1130,16 @@
         amount: Number(numericAmount.toFixed(2)),
         method: `${cleanMethod} (${cleanPayRef})`,
         proof_file: file.name,
+        proof_data: proofData || "",
         payment_status: "submitted",
         paid_at: now,
         verified_at: null
       });
-      BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments);
+      if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) {
+        // storage full: keep the payment, just without the preview image
+        payments[payments.length - 1].proof_data = "";
+        if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) return { ok: false, message: "Your payment could not be saved because browser storage is full." };
+      }
 
       const bookings = BearcatStore.readTable(DB_KEYS.BOOKINGS);
       const targetBooking = bookings.find((b) => Number(b.booking_id) === Number(lookup.booking.booking_id));
@@ -1114,6 +1159,12 @@
     submitChangeOrCancel({ bookingRef, requestType, details }) {
       const lookup = this.verifyBookingOwnership(bookingRef);
       if (!lookup.ok) return lookup;
+
+      const currentStatus = String(lookup.booking.status || "pending").toLowerCase();
+      if (["closed", "expired", "cancelled"].includes(currentStatus)) {
+        const statusText = { closed: "closed", expired: "expired", cancelled: "cancelled" }[currentStatus];
+        return { ok: false, message: `This booking is already ${statusText} and can no longer be changed or cancelled.` };
+      }
 
       const cleanType = BearcatIntegrity.sanitize(requestType, 50);
       const cleanDetails = BearcatIntegrity.sanitize(details, 1000);
@@ -1210,10 +1261,21 @@
             cancelled: "cancellation_result.html"
           };
 
+          const latestDecision = BearcatStore.readTable(DB_KEYS.CHANGES)
+            .filter((c) => Number(c.booking_id) === Number(realBooking.booking_id) && !/cancel/i.test(String(c.request_type || "")))
+            .sort((a, b) => String(b.decided_at || "").localeCompare(String(a.decided_at || "")))
+            .find((c) => ["approved", "rejected"].includes(String(c.status).toLowerCase()));
+
           try {
             sessionStorage.setItem(REF_KEY, realBooking.booking_ref);
           } catch (_) { }
           saveStatus(statusKey);
+
+          if (latestDecision) {
+            go(String(latestDecision.status).toLowerCase() === "approved" ? "change_approved.html" : "change_not_approved.html");
+            return;
+          }
+
           go(routes[statusKey] || "booking_pending.html");
           return;
         }
@@ -1231,21 +1293,25 @@
         const payRef = document.getElementById("pay-ref")?.value;
         const proofFile = document.getElementById("pay-proof")?.files?.[0];
 
-        const result = BearcatPostBooking.recordPayment({
-          bookingRef: targetRef,
-          method,
-          amount,
-          paymentRef: payRef,
-          file: proofFile
+        const proofReady = BearcatIntegrity.validateProofFile(proofFile).ok ? BearcatIntegrity.readProofData(proofFile) : Promise.resolve("");
+        proofReady.then((proofData) => {
+          const result = BearcatPostBooking.recordPayment({
+            bookingRef: targetRef,
+            method,
+            amount,
+            paymentRef: payRef,
+            file: proofFile,
+            proofData
+          });
+
+          if (!result.ok) {
+            announce(result.message);
+            window.alert(result.message);
+            return;
+          }
+
+          go(form.dataset.next || "payment_submitted.html");
         });
-
-        if (!result.ok) {
-          announce(result.message);
-          window.alert(result.message);
-          return;
-        }
-
-        go(form.dataset.next || "payment_submitted.html");
         return;
       }
 
@@ -1317,6 +1383,7 @@
   // portal (approved total, down payment, deadline, change fee, refund) is what the customer sees.
   (() => {
     if (document.querySelector("[data-submit-booking]")) return; // the review page already uses the draft
+    if (document.body.dataset.page === "track-booking") return; // no search yet, so the preview stays empty
     const booking = BearcatStore.findBookingByRef(readRef());
     if (!booking) return;
     const rows = (key) => BearcatStore.readTable(key).filter((r) => Number(r.booking_id) === Number(booking.booking_id));
@@ -1331,6 +1398,10 @@
     const pays = rows(DB_KEYS.PAYMENTS);
     const lastPay = pays[pays.length - 1];
     const paidVerified = pays.filter((p) => String(p.payment_status).toLowerCase() === "verified").reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const customers = BearcatStore.readTable(DB_KEYS.CUSTOMERS);
+    const customer = customers.find((c) => Number(c.customer_id) === Number(booking.customer_id)) || null;
+    const paxTotal = items.reduce((a, i) => a + (Number(i.pax_qty) || 0), 0);
+    const paxLabel = `${paxTotal} ${paxTotal === 1 ? "person" : "people"}`;
     const approvedChange = rows(DB_KEYS.CHANGES).filter((c) => String(c.status).toLowerCase() === "approved").pop();
     const refund = BearcatStore.readTable("btt_db_refunds").filter((r) => Number(r.booking_id) === Number(booking.booking_id)).pop();
     const when = booking.payment_due_by ? new Date(booking.payment_due_by).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : "";
@@ -1344,10 +1415,15 @@
       "Deadline": when, "Payment deadline": when,
       "Amount submitted": lastPay ? php(lastPay.amount) : "",
       "Route": items.length ? items.map((i) => `${i.pickup_location || "\u2014"} \u2192 ${i.destination || "\u2014"}`).join("; ") : "",
-      "Travelers": items.length ? `${items.reduce((a, i) => a + (Number(i.pax_qty) || 0), 0)} people` : "",
+      "Travelers": items.length ? paxLabel : "",
       "Payment received": paidVerified > 0 ? php(paidVerified) : "",
       "Balance": total > 0 && paidVerified > 0 ? php(Math.max(total - paidVerified, 0)) : "",
-      "Change fee": approvedChange && Number(approvedChange.change_fee) > 0 ? php(approvedChange.change_fee) : "",
+      ...(document.body.dataset.page === "change-approved" && approvedChange ? {
+        "Change fee": `${Number(approvedChange.change_fee_percent) || 0}% \u00B7 ${php(Number(approvedChange.change_fee) || 0)}`,
+        "Price difference": php(Number(approvedChange.price_difference) || 0),
+        "Current date": fmtDay(approvedChange.previous_date) || "\u2014",
+        "Requested date": fmtDay(approvedChange.requested_date || dates[0]) || "\u2014"
+      } : {}),
       "Refund amount": refund ? php(refund.amount) : "",
       "Refund status": refund ? ({ pending: "Pending owner approval", approved: "Approved - awaiting payout", paid: "Refunded", rejected: "Not approved" }[refund.status] || "") : ""
     };
@@ -1356,6 +1432,17 @@
       const label = row.children[0].textContent.trim();
       if (values[label]) row.children[1].textContent = values[label];
     });
+
+    if (document.body.dataset.page === "booking-confirmed") {
+      const customerName = BearcatIntegrity.sanitize(customer?.full_name || "", 100);
+      const greeting = [...document.querySelectorAll("main p")].find((p) => /^Hi\s+Customer name\b/i.test(p.textContent.trim()));
+      if (greeting && customerName) greeting.textContent = `Hi ${customerName}, we received and verified your payment.`;
+      const sms = document.querySelector("main .notice");
+      if (sms) {
+        const travelDate = fmtDay(dates[0]) || "your travel date";
+        sms.textContent = `Bearcat Travel & Tours: Booking ${booking.booking_ref} is CONFIRMED. Travel date ${travelDate}. Track your booking on our website. Thank you!`;
+      }
+    }
   })();
 
   const page = document.body.dataset.page;
@@ -2003,8 +2090,11 @@
 
   if (page === "status-timeline") {
     let status = "pending";
-    try { status = (sessionStorage.getItem(STATUS_KEY) || status).toLowerCase(); } catch (_) { }
-    const aliases = { "payment-deadline-passed": "expired", "booking-closed": "closed", "cancellation-result": "cancelled" };
+    // The saved booking record is authoritative; the session value is only a fallback when no record exists.
+    const currentBooking = BearcatStore.findBookingByRef(readRef());
+    if (currentBooking && currentBooking.status) status = String(currentBooking.status).toLowerCase();
+    else try { status = (sessionStorage.getItem(STATUS_KEY) || status).toLowerCase(); } catch (_) { }
+    const aliases = { "payment-deadline-passed": "expired", "booking-closed": "closed", "cancellation-result": "cancelled", payment_submitted: "approved" };
     status = aliases[status] || status;
     const panels = [...document.querySelectorAll("[data-status-panel]")];
     if (!panels.some((panel) => panel.dataset.statusPanel === status)) status = "pending";
@@ -2012,6 +2102,23 @@
     const current = panels.find((panel) => panel.dataset.statusPanel === status);
     const summary = document.getElementById("status-summary");
     if (summary && current) summary.textContent = `Current status: ${current.querySelector("h2")?.textContent || status}.`;
+  }
+
+  // The Track booking preview timeline must reflect the saved booking, not a hardcoded Pending/Approved sequence.
+  const trackTimeline = document.querySelector("[data-track-timeline]");
+  if (trackTimeline) {
+    const savedBooking = BearcatStore.findBookingByRef(readRef());
+    const steps = [...trackTimeline.querySelectorAll("li")];
+    const labels = ["Pending", "Approved", "Confirmed"];
+    const savedStatus = savedBooking ? String(savedBooking.status || "").toLowerCase() : "";
+    const reached = savedStatus === "payment_submitted" ? 1 : ["pending", "approved", "confirmed"].indexOf(savedStatus);
+    steps.forEach((step, i) => {
+      step.classList.remove("done", "current");
+      if (!savedBooking || reached < 0) { step.textContent = `${i + 1}\u00A0 ${labels[i]}`; return; }
+      if (i < reached) { step.classList.add("done"); step.textContent = `✓ ${labels[i]}`; }
+      else if (i === reached) { step.classList.add("current"); step.textContent = labels[i]; }
+      else { step.textContent = `${i + 1}\u00A0 ${labels[i]}`; }
+    });
   }
 
   const track = document.querySelector("form[data-track-form]");
