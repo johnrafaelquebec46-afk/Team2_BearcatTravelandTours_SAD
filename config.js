@@ -6,4 +6,4 @@
 
    No trailing slash. Never put passwords or secrets in this file; it is public on GitHub Pages.
 --------------------------------------------------------------------------------------------- */
-window.BEARCAT_API_BASE = "http://localhost:3000";
+window.BEARCAT_API_BASE = "https://team2-bearcattravelandtours-sad.onrender.com";
