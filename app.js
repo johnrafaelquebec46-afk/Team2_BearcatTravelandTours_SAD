@@ -43,7 +43,7 @@
     },
     isValidIdNumber(idNo) {
       const clean = this.sanitize(idNo, 50);
-      return /^[A-Za-z0-9\-]{4,50}$/.test(clean);
+      return /^[A-Za-z0-9\-:]{4,50}$/.test(clean);
     },
     isValidCurrency(amount, allowZero = true) {
       const num = Number(amount);
@@ -1432,6 +1432,32 @@
     });
   })();
 
+  // Show the real date + time on the "request received" pages (replaces the MM/DD/YYYY · 00:00 placeholder).
+  (() => {
+    const submittedNode = document.querySelector("[data-submitted-at]");
+    const requestedNode = document.querySelector("[data-requested-at]");
+    if (!submittedNode && !requestedNode) return;
+    const toDate = (value) => {
+      if (!value) return null;
+      const text = String(value).trim();
+      const d = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text) ? text.replace(" ", "T") : text); // DB text "YYYY-MM-DD HH:MM:SS" = local time
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const fmt = (d) => `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d)} \u00B7 ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).format(d)}`;
+    const booking = BearcatStore.findBookingByRef(readRef());
+    if (!booking) return;
+    if (submittedNode) {
+      const d = toDate(booking.created_at);
+      if (d) submittedNode.textContent = fmt(d);
+    }
+    if (requestedNode) {
+      const mine = BearcatStore.readTable(DB_KEYS.CHANGES).filter((c) => Number(c.booking_id) === Number(booking.booking_id));
+      const latest = mine.sort((a, b) => (toDate(a.requested_at) || 0) - (toDate(b.requested_at) || 0)).pop();
+      const d = toDate(latest?.requested_at);
+      if (d) requestedNode.textContent = fmt(d);
+    }
+  })();
+
   const page = document.body.dataset.page;
   const activeNav = new Map([
     ["index", "Home"], ["services", "Services"], ["service-details", "Services"],
@@ -1678,16 +1704,17 @@
     const paxLimit = Number.isInteger(savedPax) && savedPax > 0 ? savedPax : Number(travelerForm.dataset.initialCount || 1);
     const savedCount = (() => { try { return Number(sessionStorage.getItem(TRAVELER_COUNT_KEY)); } catch (_) { return 0; } })();
 
+    const ID_TYPE_OPTIONS_HTML = `<option value="">Select an ID</option><optgroup label="National ID"><option value="national-id" data-max-length="16" data-format="numeric">PhilSys National ID / PCN</option></optgroup><optgroup label="Government-issued ID"><option value="umid" data-max-length="12" data-format="numeric">UMID / CRN</option><option value="passport" data-max-length="9" data-format="alnum">Passport</option><option value="postal-id" data-max-length="20" data-format="alnum">Postal ID</option><option value="prc-id" data-max-length="10" data-format="numeric">PRC ID</option><option value="voters-id" data-max-length="20" data-format="alnum">Voter’s ID</option></optgroup><optgroup label="Driver’s license"><option value="drivers-license" data-max-length="15" data-format="alnum">Driver’s License (LTO)</option></optgroup><optgroup label="School ID"><option value="school-id" data-max-length="20" data-format="alnum">School ID</option></optgroup>`;
     const cardMarkup = (index) => `<fieldset class="traveler-card" data-traveler-card="${index}">
       <legend>Traveler ${index}</legend>
       <label for="traveler-${index}-name">Full name as shown on ID</label>
       <input id="traveler-${index}-name" name="traveler[${index}][name]" autocomplete="name" placeholder="Traveler full name" required>
       <div class="inline-fields">
         <div><label for="traveler-${index}-birth">Birthdate</label><input id="traveler-${index}-birth" name="traveler[${index}][birthdate]" type="date" required></div>
-        <div><label for="traveler-${index}-id-type">Accepted ID type</label><select id="traveler-${index}-id-type" name="traveler[${index}][idType]" data-id-type required><option value="">Select an ID</option><option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option><option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option></select></div>
+        <div><label for="traveler-${index}-id-type">Accepted ID type</label><select id="traveler-${index}-id-type" name="traveler[${index}][idType]" data-id-type required>${ID_TYPE_OPTIONS_HTML}</select></div>
       </div>
       <label for="traveler-${index}-id-number">ID number</label>
-      <input id="traveler-${index}-id-number" name="traveler[${index}][idNumber]" data-id-number type="text" inputmode="numeric" autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-${index}-id-help" placeholder="Select ID type first" required disabled>
+      <input id="traveler-${index}-id-number" name="traveler[${index}][idNumber]" data-id-number type="text" inputmode="text" autocomplete="off" maxlength="20" aria-describedby="traveler-${index}-id-help" placeholder="Select ID type first" required disabled>
       <p id="traveler-${index}-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
     </fieldset>`;
 
@@ -1736,18 +1763,22 @@
       const select = card.querySelector("[data-id-type]");
       const input = card.querySelector("[data-id-number]");
       const hint = card.querySelector(".id-help");
+      const cleanValue = (value, numeric, max) => (numeric ? value.replace(/\D/g, "") : value.replace(/[^A-Za-z0-9-]/g, "")).slice(0, max);
       const applyType = () => {
         const option = select.selectedOptions[0];
-        const digits = Number(option?.dataset.maxDigits || 0);
-        input.disabled = !digits;
-        input.maxLength = digits || 16;
-        input.value = input.value.replace(/\D/g, "").slice(0, digits || 16);
-        input.placeholder = digits ? `Enter up to ${digits} digits` : "Select ID type first";
-        hint.textContent = digits ? `Maximum ${digits} digits for this ID type.` : "Select an ID type to see the maximum digit count.";
+        const max = Number(option?.dataset.maxLength || option?.dataset.maxDigits || 0);
+        const numeric = (option?.dataset.format || "numeric") === "numeric";
+        input.disabled = !max;
+        input.maxLength = max || 20;
+        input.inputMode = numeric ? "numeric" : "text";
+        input.dataset.format = numeric ? "numeric" : "alnum";
+        input.value = cleanValue(input.value, numeric, max || 20);
+        input.placeholder = max ? `Enter up to ${max} ${numeric ? "digits" : "characters"}` : "Select ID type first";
+        hint.textContent = max ? `Maximum ${max} ${numeric ? "digits" : "letters/numbers"} for this ID type.` : "Select an ID type to see the maximum length.";
       };
       select.addEventListener("change", applyType);
       input.addEventListener("input", () => {
-        input.value = input.value.replace(/\D/g, "").slice(0, input.maxLength);
+        input.value = cleanValue(input.value, input.dataset.format !== "alnum", input.maxLength);
         if (duplicateErrorWasShown) validateDuplicateTravelerIds(false);
       });
       input.addEventListener("blur", () => validateDuplicateTravelerIds(true));
@@ -1916,6 +1947,9 @@
       document.body.classList.add("confirmation-active");
       dialog.focus();
     };
+
+    // Only 1 traveler in Trip details -> there is nothing to add, so the button is not shown at all.
+    if (paxLimit <= 1 && addButton) { addButton.hidden = true; addButton.style.display = "none"; }
 
     addButton?.addEventListener("click", () => {
       const currentCount = list.querySelectorAll("[data-traveler-card]").length;
