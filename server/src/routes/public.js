@@ -4,6 +4,8 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { pool, withTx } = require('../db');
 const { fromDb, isoToDb, HttpError, bad } = require('../convert');
+const { expireOverdue, MARK } = require('../expire');
+const sweep = () => expireOverdue().catch(() => { /* never block a page on the sweep */ });
 
 const router = express.Router();
 const writeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { ok: false, error: 'Too many requests. Please wait a few minutes and try again.' } });
@@ -39,6 +41,7 @@ const refParam = (req) => { const ref = String(req.params.ref || '').toUpperCase
 // Services and open/closed dates (no personal data)
 router.get('/public/bootstrap', readLimiter, async (req, res, next) => {
   try {
+    await sweep();
     const [services] = await pool.query('SELECT * FROM service ORDER BY service_id');
     const [avail] = await pool.query('SELECT * FROM service_availability WHERE service_date >= ? ORDER BY service_date', [bizToday()]);
     res.json({ ok: true, services: rows('services', services), availability: rows('availability', avail).map((a) => ({ ...a, notes: null })) });
@@ -47,6 +50,7 @@ router.get('/public/bootstrap', readLimiter, async (req, res, next) => {
 
 router.get('/public/bookings/:ref', readLimiter, async (req, res, next) => {
   try {
+    await sweep(); // cancel unpaid bookings that are past their deadline before showing the status
     const b = await bundle(pool, refParam(req));
     if (!b) throw new HttpError(404, 'Booking reference not found. Check your BTT reference code.');
     res.json(b);
@@ -102,9 +106,11 @@ router.post('/public/bookings/:ref/payments', writeLimiter, async (req, res, nex
     if (!method || payRef.length < 4) throw bad('Select a payment method and enter a valid payment reference number.');
     if (!(amount > 0) || amount > 10000000) throw bad('Payment amount must be greater than PHP 0.00.');
     if (!proof) throw bad('Upload a valid payment proof file.');
+    await sweep();
     const out = await withTx(async (conn) => {
       const [[b]] = await conn.query('SELECT * FROM booking WHERE booking_ref = ? FOR UPDATE', [ref]);
       if (!b) throw new HttpError(404, 'Booking reference not found.');
+      if (b.status === 'cancelled' && String(b.remarks || '').includes(MARK)) throw new HttpError(409, 'The payment deadline has passed, so this booking was cancelled automatically. Please check your booking status or submit a new request.');
       if (b.status !== 'approved') throw new HttpError(409, 'This booking is not waiting for a payment right now.');
       if (b.payment_due_by && new Date(String(b.payment_due_by).replace(' ', 'T') + 'Z').getTime() < Date.now()) throw new HttpError(409, 'The payment deadline has passed. Please check your booking status.');
       const now = isoToDb(new Date());

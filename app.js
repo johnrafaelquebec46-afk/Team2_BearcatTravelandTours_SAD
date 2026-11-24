@@ -2,6 +2,7 @@
   "use strict";
   const REF_KEY = "bearcatCustomerDemoReference";
   const STATUS_KEY = "bearcatCustomerDemoStatus";
+  const AUTO_CANCEL_MARK = "System: Automatically cancelled - the down payment was not received within the payment deadline.";
   const PAX_KEY = "bearcatCustomerDemoPax";
   const TRAVELER_COUNT_KEY = "bearcatCustomerDemoTravelerCount";
   const TRIP_DATE_KEY = "bearcatCustomerDemoTripDate";
@@ -61,34 +62,6 @@
       }
       return { ok: true };
     },
-    // Reads the proof so staff can preview it (BUG-06). Images are shrunk so they fit in localStorage; small PDFs are kept as-is.
-    readProofData(file) {
-      return new Promise((resolve) => {
-        if (!file) return resolve("");
-        const reader = new FileReader();
-        reader.onerror = () => resolve("");
-        reader.onload = () => {
-          const original = String(reader.result || "");
-          if (file.type === "application/pdf") return resolve(original.length <= 900 * 1024 ? original : "");
-          const img = new Image();
-          img.onerror = () => resolve("");
-          img.onload = () => {
-            try {
-              const scale = Math.min(1, 900 / Math.max(img.width, img.height));
-              const canvas = document.createElement("canvas");
-              canvas.width = Math.max(1, Math.round(img.width * scale));
-              canvas.height = Math.max(1, Math.round(img.height * scale));
-              const ctx = canvas.getContext("2d");
-              ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL("image/jpeg", 0.7));
-            } catch (_) { resolve(""); }
-          };
-          img.src = original;
-        };
-        reader.readAsDataURL(file);
-      });
-    },
     generateBookingRef() {
       const datePart = localToday().replace(/-/g, "");
       const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -126,8 +99,53 @@
       this.writeTable(DB_KEYS.SERVICES, defaults);
       return defaults;
     },
+    // BROWSER-ONLY MODE: an approved booking past its payment deadline (and with no payment) is cancelled automatically.
+    // (In database mode the server does this - see server/src/expire.js.)
+    expireOverdue() {
+      if (window.BearcatRemote?.enabled) return 0;
+      const now = Date.now();
+      const bookings = this.readTable(DB_KEYS.BOOKINGS);
+      const pays = this.readTable(DB_KEYS.PAYMENTS);
+      const due = bookings.filter((b) => String(b.status).toLowerCase() === "approved" && b.payment_due_by && new Date(b.payment_due_by).getTime() < now
+        && !pays.some((p) => Number(p.booking_id) === Number(b.booking_id) && ["submitted", "verified"].includes(String(p.payment_status).toLowerCase())));
+      if (!due.length) return 0;
+      const iso = new Date().toISOString();
+      const items = this.readTable(DB_KEYS.BOOKING_ITEMS);
+      const customers = this.readTable(DB_KEYS.CUSTOMERS);
+      const services = this.readTable(DB_KEYS.SERVICES);
+      const avail = this.readTable("btt_db_availability");
+      const audit = this.readTable("btt_db_audit_log");
+      const notices = this.readTable("btt_db_notifications");
+      const nextId = (rows, k) => rows.reduce((m, r) => Math.max(m, Number(r[k]) || 0), 0) + 1;
+      const php = (n) => `PHP ${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      due.forEach((b) => {
+        const lines = items.filter((i) => Number(i.booking_id) === Number(b.booking_id));
+        const when = new Date(b.payment_due_by).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+        b.remarks = [b.remarks, AUTO_CANCEL_MARK].filter(Boolean).join(" | ");
+        b.status = "cancelled"; b.updated_at = iso;
+        lines.forEach((it) => {
+          const av = avail.find((a) => Number(a.service_id) === Number(it.service_id) && String(a.service_date) === String(it.service_date));
+          if (!av) return;
+          av.available_slots = Math.min(Number(av.available_slots) + Number(it.pax_qty), Number(av.max_capacity));
+          if (av.status === "fully_booked" && av.available_slots > 0) av.status = "available";
+        });
+        audit.push({ log_id: nextId(audit, "log_id"), staff_id: null, action: "Auto-cancelled unpaid booking", booking_id: b.booking_id, reference: b.booking_ref, details: `Down payment of ${php(b.deposit_amount)} was not received by ${when}.`, created_at: iso });
+        const c = customers.find((x) => Number(x.customer_id) === Number(b.customer_id));
+        const svc = [...new Set(lines.map((i) => services.find((s) => Number(s.service_id) === Number(i.service_id))?.service_name).filter(Boolean))].join(", ");
+        const message = `Hello ${c ? c.full_name : ""},\n\nYour booking request ${b.booking_ref} for ${svc} has been cancelled automatically.\n\nReason: your down payment of ${php(b.deposit_amount)} was not received by ${when} (1-hour deadline after approval). No payment was recorded, so there is nothing to refund.\n\nYou are welcome to submit a new booking request at any time.\n\nBearcat Travel & Tours`;
+        [["email", c && c.email], ["sms", c && c.contact_no]].filter(([, r]) => r).forEach(([channel, recipient]) => {
+          notices.push({ notification_id: nextId(notices, "notification_id"), booking_id: b.booking_id, reference: b.booking_ref, recipient, channel, template_type: "booking_closed", subject: channel === "email" ? `Your booking ${b.booking_ref} was cancelled - payment deadline missed` : null, message, status: "queued", created_at: iso });
+        });
+      });
+      this.writeTable(DB_KEYS.BOOKINGS, bookings);
+      this.writeTable("btt_db_availability", avail);
+      this.writeTable("btt_db_audit_log", audit);
+      this.writeTable("btt_db_notifications", notices);
+      return due.length;
+    },
     findBookingByRef(ref) {
       const target = BearcatIntegrity.sanitize(ref, 50).toUpperCase();
+      this.expireOverdue(); // browser-only mode: cancel unpaid bookings that are past their deadline
       if (window.BearcatRemote?.enabled && !window.BearcatRemote.admin) window.BearcatRemote.refreshBooking(target); // DATABASE MODE: get the latest copy from MySQL
       return this.readTable(DB_KEYS.BOOKINGS).find((b) => String(b.booking_ref).toUpperCase() === target) || null;
     }
@@ -1106,7 +1124,7 @@
       }
       return { ok: true, booking };
     },
-    recordPayment({ bookingRef, method, amount, paymentRef, file, proofData }) {
+    recordPayment({ bookingRef, method, amount, paymentRef, file }) {
       const lookup = this.verifyBookingOwnership(bookingRef);
       if (!lookup.ok) return lookup;
 
@@ -1145,16 +1163,11 @@
         amount: Number(numericAmount.toFixed(2)),
         method: `${cleanMethod} (${cleanPayRef})`,
         proof_file: file.name,
-        proof_data: proofData || "",
         payment_status: "submitted",
         paid_at: now,
         verified_at: null
       });
-      if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) {
-        // storage full: keep the payment, just without the preview image
-        payments[payments.length - 1].proof_data = "";
-        if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) return { ok: false, message: "Your payment could not be saved because browser storage is full." };
-      }
+      BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments);
 
       const bookings = BearcatStore.readTable(DB_KEYS.BOOKINGS);
       const targetBooking = bookings.find((b) => Number(b.booking_id) === Number(lookup.booking.booking_id));
@@ -1300,25 +1313,21 @@
         const payRef = document.getElementById("pay-ref")?.value;
         const proofFile = document.getElementById("pay-proof")?.files?.[0];
 
-        const proofReady = BearcatIntegrity.validateProofFile(proofFile).ok ? BearcatIntegrity.readProofData(proofFile) : Promise.resolve("");
-        proofReady.then((proofData) => {
-          const result = BearcatPostBooking.recordPayment({
-            bookingRef: targetRef,
-            method,
-            amount,
-            paymentRef: payRef,
-            file: proofFile,
-            proofData
-          });
-
-          if (!result.ok) {
-            announce(result.message);
-            window.alert(result.message);
-            return;
-          }
-
-          go(form.dataset.next || "payment_submitted.html");
+        const result = BearcatPostBooking.recordPayment({
+          bookingRef: targetRef,
+          method,
+          amount,
+          paymentRef: payRef,
+          file: proofFile
         });
+
+        if (!result.ok) {
+          announce(result.message);
+          window.alert(result.message);
+          return;
+        }
+
+        go(form.dataset.next || "payment_submitted.html");
         return;
       }
 
@@ -1430,6 +1439,36 @@
       const label = row.children[0].textContent.trim();
       if (values[label]) row.children[1].textContent = values[label];
     });
+
+    // ---- 1-hour payment deadline: countdown, and the automatic-cancellation notice --------------------------------
+    const pg = document.body.dataset.page;
+    const isAuto = (b) => String(b.status).toLowerCase() === "cancelled" && String(b.remarks || "").includes(AUTO_CANCEL_MARK);
+    const setRow = (label, text) => document.querySelectorAll("div, li, tr").forEach((row) => { if (row.children.length === 2 && row.children[0].textContent.trim() === label) row.children[1].textContent = text; });
+    if (pg === "cancellation-result" && isAuto(booking)) {
+      const h1 = document.querySelector(".page-heading h1"); if (h1) h1.textContent = "Your booking was cancelled automatically";
+      const lead = document.querySelector(".page-heading p:not(.eyebrow)"); if (lead) lead.textContent = "The down payment was not received before the payment deadline.";
+      setRow("Payment status", "No payment received");
+      const refundCard = document.querySelector(".cancelled-card .inner-card"); 
+      if (refundCard) { refundCard.innerHTML = `<h2>Why was this cancelled?</h2><p>Your booking was approved with a <strong>1-hour deadline</strong> to pay the down payment. We did not receive a payment by <strong>${when || "the deadline"}</strong>, so the system cancelled the booking and released your seats.</p><p class="hint">No payment was recorded, so there is nothing to refund. You can submit a new booking request at any time.</p><div class="actions"><a class="button button-primary" href="availability.html">Make a new booking request</a><a class="button button-soft" href="contact_us.html">Contact us</a></div>`; }
+    }
+    if ((pg === "request-approved" || pg === "submit-payment") && isAuto(booking)) { saveStatus("cancelled"); go("cancellation_result.html"); return; } // deadline already passed: show the cancellation
+    if ((pg === "request-approved" || pg === "submit-payment") && String(booking.status).toLowerCase() === "approved" && booking.payment_due_by) {
+      const dueMs = new Date(booking.payment_due_by).getTime();
+      const left = () => { const m = Math.ceil((dueMs - Date.now()) / 60000); return m > 1 ? `${m} minutes left` : m === 1 ? "less than 1 minute left" : "time is up"; };
+      const rowsWithDeadline = [...document.querySelectorAll("div, li, tr")].filter((r) => r.children.length === 2 && ["Deadline", "Payment deadline"].includes(r.children[0].textContent.trim()));
+      const intro = [...document.querySelectorAll("p")].find((x) => /^Complete payment within 1 hour/i.test(x.textContent.trim()));
+      const paint = () => {
+        rowsWithDeadline.forEach((r) => { r.children[1].textContent = `${when} (${left()})`; });
+        if (intro) intro.textContent = `Complete payment by ${when} (${left()}). If the down payment is not received by then, the booking is cancelled automatically.`;
+      };
+      if (when) { paint(); setInterval(paint, 30000); }
+      const check = () => {
+        const fresh = BearcatStore.findBookingByRef(booking.booking_ref);
+        if (fresh && isAuto(fresh)) { saveStatus("cancelled"); go("cancellation_result.html"); return; }
+        if (fresh && String(fresh.status).toLowerCase() === "approved" && new Date(fresh.payment_due_by).getTime() > Date.now()) setTimeout(check, Math.max(new Date(fresh.payment_due_by).getTime() - Date.now(), 0) + 1500);
+      };
+      setTimeout(check, Math.max(dueMs - Date.now(), 0) + 1500);
+    }
   })();
 
   const page = document.body.dataset.page;
