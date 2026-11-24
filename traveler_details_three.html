@@ -47,8 +47,22 @@
             <div><label for="traveler-1-id-type">Accepted ID type</label><select id="traveler-1-id-type"
                 name="traveler[1][idType]" data-id-type required>
                 <option value="">Select an ID</option>
-                <option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option>
-                <option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option>
+                <optgroup label="National ID">
+                  <option value="national-id" data-max-length="16" data-format="numeric">PhilSys National ID / PCN</option>
+                </optgroup>
+                <optgroup label="Government-issued ID">
+                  <option value="umid" data-max-length="12" data-format="numeric">UMID / CRN</option>
+                  <option value="passport" data-max-length="9" data-format="alnum">Passport</option>
+                  <option value="postal-id" data-max-length="20" data-format="alnum">Postal ID</option>
+                  <option value="prc-id" data-max-length="10" data-format="numeric">PRC ID</option>
+                  <option value="voters-id" data-max-length="20" data-format="alnum">Voter’s ID</option>
+                </optgroup>
+                <optgroup label="Driver’s license">
+                  <option value="drivers-license" data-max-length="15" data-format="alnum">Driver’s License (LTO)</option>
+                </optgroup>
+                <optgroup label="School ID">
+                  <option value="school-id" data-max-length="20" data-format="alnum">School ID</option>
+                </optgroup>
               </select></div>
           </div>
           <label for="traveler-1-id-number">ID number</label>
@@ -68,8 +82,22 @@
             <div><label for="traveler-2-id-type">Accepted ID type</label><select id="traveler-2-id-type"
                 name="traveler[2][idType]" data-id-type required>
                 <option value="">Select an ID</option>
-                <option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option>
-                <option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option>
+                <optgroup label="National ID">
+                  <option value="national-id" data-max-length="16" data-format="numeric">PhilSys National ID / PCN</option>
+                </optgroup>
+                <optgroup label="Government-issued ID">
+                  <option value="umid" data-max-length="12" data-format="numeric">UMID / CRN</option>
+                  <option value="passport" data-max-length="9" data-format="alnum">Passport</option>
+                  <option value="postal-id" data-max-length="20" data-format="alnum">Postal ID</option>
+                  <option value="prc-id" data-max-length="10" data-format="numeric">PRC ID</option>
+                  <option value="voters-id" data-max-length="20" data-format="alnum">Voter’s ID</option>
+                </optgroup>
+                <optgroup label="Driver’s license">
+                  <option value="drivers-license" data-max-length="15" data-format="alnum">Driver’s License (LTO)</option>
+                </optgroup>
+                <optgroup label="School ID">
+                  <option value="school-id" data-max-length="20" data-format="alnum">School ID</option>
+                </optgroup>
               </select></div>
           </div>
           <label for="traveler-2-id-number">ID number</label>
@@ -89,8 +117,22 @@
             <div><label for="traveler-3-id-type">Accepted ID type</label><select id="traveler-3-id-type"
                 name="traveler[3][idType]" data-id-type required>
                 <option value="">Select an ID</option>
-                <option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option>
-                <option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option>
+                <optgroup label="National ID">
+                  <option value="national-id" data-max-length="16" data-format="numeric">PhilSys National ID / PCN</option>
+                </optgroup>
+                <optgroup label="Government-issued ID">
+                  <option value="umid" data-max-length="12" data-format="numeric">UMID / CRN</option>
+                  <option value="passport" data-max-length="9" data-format="alnum">Passport</option>
+                  <option value="postal-id" data-max-length="20" data-format="alnum">Postal ID</option>
+                  <option value="prc-id" data-max-length="10" data-format="numeric">PRC ID</option>
+                  <option value="voters-id" data-max-length="20" data-format="alnum">Voter’s ID</option>
+                </optgroup>
+                <optgroup label="Driver’s license">
+                  <option value="drivers-license" data-max-length="15" data-format="alnum">Driver’s License (LTO)</option>
+                </optgroup>
+                <optgroup label="School ID">
+                  <option value="school-id" data-max-length="20" data-format="alnum">School ID</option>
+                </optgroup>
               </select></div>
           </div>
           <label for="traveler-3-id-number">ID number</label>
@@ -103,11 +145,7 @@
       <div class="actions traveler-actions"><a class="button button-soft" href="booking_details.html">Back</a><button
           class="button button-soft" type="button" data-add-traveler>+ Add another traveler</button><button
           class="button button-primary" type="submit">Continue to review</button></div>
-      <p class="hint">Traveler count starts from the number entered in Trip details. You can add more travelers after
-        confirming the request. Use sample information only; this demo does not store ID numbers.</p>
-      <p class="hint">The wireframe does not specify the company’s accepted ID list. These ID formats are examples;
-        Bearcat staff must confirm acceptance.</p>
-    </form>
+          </form>
   </main>
   <div class="confirmation-backdrop" id="traveler-confirmation" hidden>
     <section class="confirmation-panel" role="dialog" aria-modal="true" aria-labelledby="traveler-confirmation-title"
