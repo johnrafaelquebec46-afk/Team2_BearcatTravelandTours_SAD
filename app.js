@@ -1432,6 +1432,32 @@
     });
   })();
 
+  // Show the real date + time on the "request received" pages (replaces the MM/DD/YYYY · 00:00 placeholder).
+  (() => {
+    const submittedNode = document.querySelector("[data-submitted-at]");
+    const requestedNode = document.querySelector("[data-requested-at]");
+    if (!submittedNode && !requestedNode) return;
+    const toDate = (value) => {
+      if (!value) return null;
+      const text = String(value).trim();
+      const d = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text) ? text.replace(" ", "T") : text); // DB text "YYYY-MM-DD HH:MM:SS" = local time
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const fmt = (d) => `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d)} \u00B7 ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).format(d)}`;
+    const booking = BearcatStore.findBookingByRef(readRef());
+    if (!booking) return;
+    if (submittedNode) {
+      const d = toDate(booking.created_at);
+      if (d) submittedNode.textContent = fmt(d);
+    }
+    if (requestedNode) {
+      const mine = BearcatStore.readTable(DB_KEYS.CHANGES).filter((c) => Number(c.booking_id) === Number(booking.booking_id));
+      const latest = mine.sort((a, b) => (toDate(a.requested_at) || 0) - (toDate(b.requested_at) || 0)).pop();
+      const d = toDate(latest?.requested_at);
+      if (d) requestedNode.textContent = fmt(d);
+    }
+  })();
+
   const page = document.body.dataset.page;
   const activeNav = new Map([
     ["index", "Home"], ["services", "Services"], ["service-details", "Services"],
