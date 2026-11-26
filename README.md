@@ -183,8 +183,10 @@ The following accounts and access methods can be used for testing and demonstrat
 | Role | Access Method / Email | Password |
 | --- | --- | --- |
 | CLIENT / CUSTOMER | No login required (use generated `BTT-XXXXXX` Booking Reference) | N/A |
-| MANAGEMENT / OWNER | `owner@bearcattravel.ph` | `owner123` |
-| COMPANY PERSONNEL | `staff@bearcattravel.ph` | `staff123` |
+| MANAGEMENT / OWNER | `owner@bearcat.com` | `bearcatownerpalawan12345` |
+| COMPANY PERSONNEL | `staff2@bearcat.com` | `staff123` |
+
+*Refresh database (sleeps if inactive for over 15 minutes): https://team2-bearcattravelandtours-sad.onrender.com/api/health*
 
 *(Note: Demo credentials can also be viewed or created directly under **Manage Staff Accounts** in the Owner Portal.)*
 
