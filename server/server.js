@@ -49,6 +49,7 @@ app.use((err, req, res, next) => {
 const PORT = Number(process.env.PORT || 3000);
 app.listen(PORT, () => {
   console.log(`Bearcat API listening on port ${PORT}`);
+  require('./src/expire').startSweeper(60000); // auto-cancel unpaid bookings past their deadline
   if (!origins.length) console.warn('[config] CORS_ORIGIN is empty: browsers on other sites (GitHub Pages) will be blocked.');
   pool.query('SELECT COUNT(*) AS n FROM staff').then(([[r]]) => { if (!r.n) console.warn('[setup] No staff accounts yet. Run:  npm run seed'); console.log('[db] Connected.'); })
     .catch((e) => console.error('[db] Cannot connect:', e.code || e.message));

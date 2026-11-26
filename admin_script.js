@@ -1490,6 +1490,7 @@
 
   function start() {
     ensureStaff();
+    if (!REMOTE && API) { try { API.BearcatStore.expireOverdue(); } catch (e) { console.error(e); } } // browser-only mode: cancel unpaid bookings past their 1-hour deadline (database mode: the server does it)
     if (ROLE !== 'access') {
       document.body.style.visibility = 'hidden';
       const u = me();

@@ -2,6 +2,7 @@
   "use strict";
   const REF_KEY = "bearcatCustomerDemoReference";
   const STATUS_KEY = "bearcatCustomerDemoStatus";
+  const AUTO_CANCEL_MARK = "System: Automatically cancelled - the down payment was not received within the payment deadline.";
   const PAX_KEY = "bearcatCustomerDemoPax";
   const TRAVELER_COUNT_KEY = "bearcatCustomerDemoTravelerCount";
   const TRIP_DATE_KEY = "bearcatCustomerDemoTripDate";
@@ -43,7 +44,7 @@
     },
     isValidIdNumber(idNo) {
       const clean = this.sanitize(idNo, 50);
-      return /^[A-Za-z0-9\-:]{4,50}$/.test(clean);
+      return /^[A-Za-z0-9\-]{4,50}$/.test(clean);
     },
     isValidCurrency(amount, allowZero = true) {
       const num = Number(amount);
@@ -60,34 +61,6 @@
         return { ok: false, message: "Payment proof exceeds the 5MB maximum file size." };
       }
       return { ok: true };
-    },
-    // Reads the proof so staff can preview it (BUG-06). Images are shrunk so they fit in localStorage; small PDFs are kept as-is.
-    readProofData(file) {
-      return new Promise((resolve) => {
-        if (!file) return resolve("");
-        const reader = new FileReader();
-        reader.onerror = () => resolve("");
-        reader.onload = () => {
-          const original = String(reader.result || "");
-          if (file.type === "application/pdf") return resolve(original.length <= 900 * 1024 ? original : "");
-          const img = new Image();
-          img.onerror = () => resolve("");
-          img.onload = () => {
-            try {
-              const scale = Math.min(1, 900 / Math.max(img.width, img.height));
-              const canvas = document.createElement("canvas");
-              canvas.width = Math.max(1, Math.round(img.width * scale));
-              canvas.height = Math.max(1, Math.round(img.height * scale));
-              const ctx = canvas.getContext("2d");
-              ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL("image/jpeg", 0.7));
-            } catch (_) { resolve(""); }
-          };
-          img.src = original;
-        };
-        reader.readAsDataURL(file);
-      });
     },
     generateBookingRef() {
       const datePart = localToday().replace(/-/g, "");
@@ -126,8 +99,53 @@
       this.writeTable(DB_KEYS.SERVICES, defaults);
       return defaults;
     },
+    // BROWSER-ONLY MODE: an approved booking past its payment deadline (and with no payment) is cancelled automatically.
+    // (In database mode the server does this - see server/src/expire.js.)
+    expireOverdue() {
+      if (window.BearcatRemote?.enabled) return 0;
+      const now = Date.now();
+      const bookings = this.readTable(DB_KEYS.BOOKINGS);
+      const pays = this.readTable(DB_KEYS.PAYMENTS);
+      const due = bookings.filter((b) => String(b.status).toLowerCase() === "approved" && b.payment_due_by && new Date(b.payment_due_by).getTime() < now
+        && !pays.some((p) => Number(p.booking_id) === Number(b.booking_id) && ["submitted", "verified"].includes(String(p.payment_status).toLowerCase())));
+      if (!due.length) return 0;
+      const iso = new Date().toISOString();
+      const items = this.readTable(DB_KEYS.BOOKING_ITEMS);
+      const customers = this.readTable(DB_KEYS.CUSTOMERS);
+      const services = this.readTable(DB_KEYS.SERVICES);
+      const avail = this.readTable("btt_db_availability");
+      const audit = this.readTable("btt_db_audit_log");
+      const notices = this.readTable("btt_db_notifications");
+      const nextId = (rows, k) => rows.reduce((m, r) => Math.max(m, Number(r[k]) || 0), 0) + 1;
+      const php = (n) => `PHP ${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      due.forEach((b) => {
+        const lines = items.filter((i) => Number(i.booking_id) === Number(b.booking_id));
+        const when = new Date(b.payment_due_by).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+        b.remarks = [b.remarks, AUTO_CANCEL_MARK].filter(Boolean).join(" | ");
+        b.status = "cancelled"; b.updated_at = iso;
+        lines.forEach((it) => {
+          const av = avail.find((a) => Number(a.service_id) === Number(it.service_id) && String(a.service_date) === String(it.service_date));
+          if (!av) return;
+          av.available_slots = Math.min(Number(av.available_slots) + Number(it.pax_qty), Number(av.max_capacity));
+          if (av.status === "fully_booked" && av.available_slots > 0) av.status = "available";
+        });
+        audit.push({ log_id: nextId(audit, "log_id"), staff_id: null, action: "Auto-cancelled unpaid booking", booking_id: b.booking_id, reference: b.booking_ref, details: `Down payment of ${php(b.deposit_amount)} was not received by ${when}.`, created_at: iso });
+        const c = customers.find((x) => Number(x.customer_id) === Number(b.customer_id));
+        const svc = [...new Set(lines.map((i) => services.find((s) => Number(s.service_id) === Number(i.service_id))?.service_name).filter(Boolean))].join(", ");
+        const message = `Hello ${c ? c.full_name : ""},\n\nYour booking request ${b.booking_ref} for ${svc} has been cancelled automatically.\n\nReason: your down payment of ${php(b.deposit_amount)} was not received by ${when} (1-hour deadline after approval). No payment was recorded, so there is nothing to refund.\n\nYou are welcome to submit a new booking request at any time.\n\nBearcat Travel & Tours`;
+        [["email", c && c.email], ["sms", c && c.contact_no]].filter(([, r]) => r).forEach(([channel, recipient]) => {
+          notices.push({ notification_id: nextId(notices, "notification_id"), booking_id: b.booking_id, reference: b.booking_ref, recipient, channel, template_type: "booking_closed", subject: channel === "email" ? `Your booking ${b.booking_ref} was cancelled - payment deadline missed` : null, message, status: "queued", created_at: iso });
+        });
+      });
+      this.writeTable(DB_KEYS.BOOKINGS, bookings);
+      this.writeTable("btt_db_availability", avail);
+      this.writeTable("btt_db_audit_log", audit);
+      this.writeTable("btt_db_notifications", notices);
+      return due.length;
+    },
     findBookingByRef(ref) {
       const target = BearcatIntegrity.sanitize(ref, 50).toUpperCase();
+      this.expireOverdue(); // browser-only mode: cancel unpaid bookings that are past their deadline
       if (window.BearcatRemote?.enabled && !window.BearcatRemote.admin) window.BearcatRemote.refreshBooking(target); // DATABASE MODE: get the latest copy from MySQL
       return this.readTable(DB_KEYS.BOOKINGS).find((b) => String(b.booking_ref).toUpperCase() === target) || null;
     }
@@ -1106,7 +1124,7 @@
       }
       return { ok: true, booking };
     },
-    recordPayment({ bookingRef, method, amount, paymentRef, file, proofData }) {
+    recordPayment({ bookingRef, method, amount, paymentRef, file }) {
       const lookup = this.verifyBookingOwnership(bookingRef);
       if (!lookup.ok) return lookup;
 
@@ -1145,16 +1163,11 @@
         amount: Number(numericAmount.toFixed(2)),
         method: `${cleanMethod} (${cleanPayRef})`,
         proof_file: file.name,
-        proof_data: proofData || "",
         payment_status: "submitted",
         paid_at: now,
         verified_at: null
       });
-      if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) {
-        // storage full: keep the payment, just without the preview image
-        payments[payments.length - 1].proof_data = "";
-        if (!BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments)) return { ok: false, message: "Your payment could not be saved because browser storage is full." };
-      }
+      BearcatStore.writeTable(DB_KEYS.PAYMENTS, payments);
 
       const bookings = BearcatStore.readTable(DB_KEYS.BOOKINGS);
       const targetBooking = bookings.find((b) => Number(b.booking_id) === Number(lookup.booking.booking_id));
@@ -1300,25 +1313,21 @@
         const payRef = document.getElementById("pay-ref")?.value;
         const proofFile = document.getElementById("pay-proof")?.files?.[0];
 
-        const proofReady = BearcatIntegrity.validateProofFile(proofFile).ok ? BearcatIntegrity.readProofData(proofFile) : Promise.resolve("");
-        proofReady.then((proofData) => {
-          const result = BearcatPostBooking.recordPayment({
-            bookingRef: targetRef,
-            method,
-            amount,
-            paymentRef: payRef,
-            file: proofFile,
-            proofData
-          });
-
-          if (!result.ok) {
-            announce(result.message);
-            window.alert(result.message);
-            return;
-          }
-
-          go(form.dataset.next || "payment_submitted.html");
+        const result = BearcatPostBooking.recordPayment({
+          bookingRef: targetRef,
+          method,
+          amount,
+          paymentRef: payRef,
+          file: proofFile
         });
+
+        if (!result.ok) {
+          announce(result.message);
+          window.alert(result.message);
+          return;
+        }
+
+        go(form.dataset.next || "payment_submitted.html");
         return;
       }
 
@@ -1430,31 +1439,35 @@
       const label = row.children[0].textContent.trim();
       if (values[label]) row.children[1].textContent = values[label];
     });
-  })();
 
-  // Show the real date + time on the "request received" pages (replaces the MM/DD/YYYY · 00:00 placeholder).
-  (() => {
-    const submittedNode = document.querySelector("[data-submitted-at]");
-    const requestedNode = document.querySelector("[data-requested-at]");
-    if (!submittedNode && !requestedNode) return;
-    const toDate = (value) => {
-      if (!value) return null;
-      const text = String(value).trim();
-      const d = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text) ? text.replace(" ", "T") : text); // DB text "YYYY-MM-DD HH:MM:SS" = local time
-      return Number.isNaN(d.getTime()) ? null : d;
-    };
-    const fmt = (d) => `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d)} \u00B7 ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).format(d)}`;
-    const booking = BearcatStore.findBookingByRef(readRef());
-    if (!booking) return;
-    if (submittedNode) {
-      const d = toDate(booking.created_at);
-      if (d) submittedNode.textContent = fmt(d);
+    // ---- 1-hour payment deadline: countdown, and the automatic-cancellation notice --------------------------------
+    const pg = document.body.dataset.page;
+    const isAuto = (b) => String(b.status).toLowerCase() === "cancelled" && String(b.remarks || "").includes(AUTO_CANCEL_MARK);
+    const setRow = (label, text) => document.querySelectorAll("div, li, tr").forEach((row) => { if (row.children.length === 2 && row.children[0].textContent.trim() === label) row.children[1].textContent = text; });
+    if (pg === "cancellation-result" && isAuto(booking)) {
+      const h1 = document.querySelector(".page-heading h1"); if (h1) h1.textContent = "Your booking was cancelled automatically";
+      const lead = document.querySelector(".page-heading p:not(.eyebrow)"); if (lead) lead.textContent = "The down payment was not received before the payment deadline.";
+      setRow("Payment status", "No payment received");
+      const refundCard = document.querySelector(".cancelled-card .inner-card"); 
+      if (refundCard) { refundCard.innerHTML = `<h2>Why was this cancelled?</h2><p>Your booking was approved with a <strong>1-hour deadline</strong> to pay the down payment. We did not receive a payment by <strong>${when || "the deadline"}</strong>, so the system cancelled the booking and released your seats.</p><p class="hint">No payment was recorded, so there is nothing to refund. You can submit a new booking request at any time.</p><div class="actions"><a class="button button-primary" href="availability.html">Make a new booking request</a><a class="button button-soft" href="contact_us.html">Contact us</a></div>`; }
     }
-    if (requestedNode) {
-      const mine = BearcatStore.readTable(DB_KEYS.CHANGES).filter((c) => Number(c.booking_id) === Number(booking.booking_id));
-      const latest = mine.sort((a, b) => (toDate(a.requested_at) || 0) - (toDate(b.requested_at) || 0)).pop();
-      const d = toDate(latest?.requested_at);
-      if (d) requestedNode.textContent = fmt(d);
+    if ((pg === "request-approved" || pg === "submit-payment") && isAuto(booking)) { saveStatus("cancelled"); go("cancellation_result.html"); return; } // deadline already passed: show the cancellation
+    if ((pg === "request-approved" || pg === "submit-payment") && String(booking.status).toLowerCase() === "approved" && booking.payment_due_by) {
+      const dueMs = new Date(booking.payment_due_by).getTime();
+      const left = () => { const m = Math.ceil((dueMs - Date.now()) / 60000); return m > 1 ? `${m} minutes left` : m === 1 ? "less than 1 minute left" : "time is up"; };
+      const rowsWithDeadline = [...document.querySelectorAll("div, li, tr")].filter((r) => r.children.length === 2 && ["Deadline", "Payment deadline"].includes(r.children[0].textContent.trim()));
+      const intro = [...document.querySelectorAll("p")].find((x) => /^Complete payment within 1 hour/i.test(x.textContent.trim()));
+      const paint = () => {
+        rowsWithDeadline.forEach((r) => { r.children[1].textContent = `${when} (${left()})`; });
+        if (intro) intro.textContent = `Complete payment by ${when} (${left()}). If the down payment is not received by then, the booking is cancelled automatically.`;
+      };
+      if (when) { paint(); setInterval(paint, 30000); }
+      const check = () => {
+        const fresh = BearcatStore.findBookingByRef(booking.booking_ref);
+        if (fresh && isAuto(fresh)) { saveStatus("cancelled"); go("cancellation_result.html"); return; }
+        if (fresh && String(fresh.status).toLowerCase() === "approved" && new Date(fresh.payment_due_by).getTime() > Date.now()) setTimeout(check, Math.max(new Date(fresh.payment_due_by).getTime() - Date.now(), 0) + 1500);
+      };
+      setTimeout(check, Math.max(dueMs - Date.now(), 0) + 1500);
     }
   })();
 
@@ -1704,17 +1717,16 @@
     const paxLimit = Number.isInteger(savedPax) && savedPax > 0 ? savedPax : Number(travelerForm.dataset.initialCount || 1);
     const savedCount = (() => { try { return Number(sessionStorage.getItem(TRAVELER_COUNT_KEY)); } catch (_) { return 0; } })();
 
-    const ID_TYPE_OPTIONS_HTML = `<option value="">Select an ID</option><optgroup label="National ID"><option value="national-id" data-max-length="16" data-format="numeric">PhilSys National ID / PCN</option></optgroup><optgroup label="Government-issued ID"><option value="umid" data-max-length="12" data-format="numeric">UMID / CRN</option><option value="passport" data-max-length="9" data-format="alnum">Passport</option><option value="postal-id" data-max-length="20" data-format="alnum">Postal ID</option><option value="prc-id" data-max-length="10" data-format="numeric">PRC ID</option><option value="voters-id" data-max-length="20" data-format="alnum">Voter’s ID</option></optgroup><optgroup label="Driver’s license"><option value="drivers-license" data-max-length="15" data-format="alnum">Driver’s License (LTO)</option></optgroup><optgroup label="School ID"><option value="school-id" data-max-length="20" data-format="alnum">School ID</option></optgroup>`;
     const cardMarkup = (index) => `<fieldset class="traveler-card" data-traveler-card="${index}">
       <legend>Traveler ${index}</legend>
       <label for="traveler-${index}-name">Full name as shown on ID</label>
       <input id="traveler-${index}-name" name="traveler[${index}][name]" autocomplete="name" placeholder="Traveler full name" required>
       <div class="inline-fields">
         <div><label for="traveler-${index}-birth">Birthdate</label><input id="traveler-${index}-birth" name="traveler[${index}][birthdate]" type="date" required></div>
-        <div><label for="traveler-${index}-id-type">Accepted ID type</label><select id="traveler-${index}-id-type" name="traveler[${index}][idType]" data-id-type required>${ID_TYPE_OPTIONS_HTML}</select></div>
+        <div><label for="traveler-${index}-id-type">Accepted ID type</label><select id="traveler-${index}-id-type" name="traveler[${index}][idType]" data-id-type required><option value="">Select an ID</option><option value="national-id" data-max-digits="16">PhilSys National ID / PCN — up to 16 digits</option><option value="umid" data-max-digits="12">UMID / CRN — up to 12 digits</option></select></div>
       </div>
       <label for="traveler-${index}-id-number">ID number</label>
-      <input id="traveler-${index}-id-number" name="traveler[${index}][idNumber]" data-id-number type="text" inputmode="text" autocomplete="off" maxlength="20" aria-describedby="traveler-${index}-id-help" placeholder="Select ID type first" required disabled>
+      <input id="traveler-${index}-id-number" name="traveler[${index}][idNumber]" data-id-number type="text" inputmode="numeric" autocomplete="off" maxlength="16" pattern="[0-9]*" aria-describedby="traveler-${index}-id-help" placeholder="Select ID type first" required disabled>
       <p id="traveler-${index}-id-help" class="hint id-help">Select an ID type to see the maximum digit count.</p>
     </fieldset>`;
 
@@ -1763,22 +1775,18 @@
       const select = card.querySelector("[data-id-type]");
       const input = card.querySelector("[data-id-number]");
       const hint = card.querySelector(".id-help");
-      const cleanValue = (value, numeric, max) => (numeric ? value.replace(/\D/g, "") : value.replace(/[^A-Za-z0-9-]/g, "")).slice(0, max);
       const applyType = () => {
         const option = select.selectedOptions[0];
-        const max = Number(option?.dataset.maxLength || option?.dataset.maxDigits || 0);
-        const numeric = (option?.dataset.format || "numeric") === "numeric";
-        input.disabled = !max;
-        input.maxLength = max || 20;
-        input.inputMode = numeric ? "numeric" : "text";
-        input.dataset.format = numeric ? "numeric" : "alnum";
-        input.value = cleanValue(input.value, numeric, max || 20);
-        input.placeholder = max ? `Enter up to ${max} ${numeric ? "digits" : "characters"}` : "Select ID type first";
-        hint.textContent = max ? `Maximum ${max} ${numeric ? "digits" : "letters/numbers"} for this ID type.` : "Select an ID type to see the maximum length.";
+        const digits = Number(option?.dataset.maxDigits || 0);
+        input.disabled = !digits;
+        input.maxLength = digits || 16;
+        input.value = input.value.replace(/\D/g, "").slice(0, digits || 16);
+        input.placeholder = digits ? `Enter up to ${digits} digits` : "Select ID type first";
+        hint.textContent = digits ? `Maximum ${digits} digits for this ID type.` : "Select an ID type to see the maximum digit count.";
       };
       select.addEventListener("change", applyType);
       input.addEventListener("input", () => {
-        input.value = cleanValue(input.value, input.dataset.format !== "alnum", input.maxLength);
+        input.value = input.value.replace(/\D/g, "").slice(0, input.maxLength);
         if (duplicateErrorWasShown) validateDuplicateTravelerIds(false);
       });
       input.addEventListener("blur", () => validateDuplicateTravelerIds(true));
@@ -1947,9 +1955,6 @@
       document.body.classList.add("confirmation-active");
       dialog.focus();
     };
-
-    // Only 1 traveler in Trip details -> there is nothing to add, so the button is not shown at all.
-    if (paxLimit <= 1 && addButton) { addButton.hidden = true; addButton.style.display = "none"; }
 
     addButton?.addEventListener("click", () => {
       const currentCount = list.querySelectorAll("[data-traveler-card]").length;

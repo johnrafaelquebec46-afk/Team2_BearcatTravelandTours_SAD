@@ -71,13 +71,31 @@
                         </tbody>
                     </table>
                 </div>
+            </section>
+            <form class="surface form-card grid-form demo-form">
+                <label for="field-1">Decision</label>
+                <select id="field-1">
+                    <option>Approve</option>
+                    <option>Reject</option>
+                </select>
+                <label for="field-2">Change fee rate</label>
+                <select id="field-2">
+                    <option>5%</option>
+                    <option>10%</option>
+                </select>
+                <label for="field-3">Change fee (₱)</label>
+                <input id="field-3" type="number" placeholder="0.00">
+                <label for="field-4">Price difference (₱)</label>
+                <input id="field-4" type="number" placeholder="0.00">
+                <label for="field-5">New total (₱)</label>
+                <input id="field-5" type="number" placeholder="0.00">
+                <label for="field-6">Staff remarks (shown to customer)</label>
                 <textarea id="field-6" placeholder="Remarks or cancellation terms"></textarea>
                 <div class="form-actions">
                     <button class="button button-primary" type="submit">Apply & notify customer</button>
                     <a class="button button-soft" href="A403change_decision_saved.html">Reject decision</a>
-                    <a class="button button-soft" href="A401change_requests_list.html">Back</a>
-                </div>
-            </section>
+                    <a class="button button-soft" href="A401change_requests_list.html">Back</a></div>
+            </form>
         </div>
     </main>
     <footer class="site-footer">
